@@ -66,8 +66,8 @@ LOCAL_CFLAGS = \
     -D__GMM \
     -D__STDC_CONSTANT_MACROS \
     -D__STDC_LIMIT_MACROS \
-    -D__UMD
-
+    -D__UMD \
+	-Wno-error
 
 LOCAL_CPPFLAGS = \
     -std=c++11
