@@ -69,8 +69,16 @@ LOCAL_CFLAGS = \
     -D__UMD \
 	-Wno-error
 
+LOCAL_CFLAGS += \
+    -msse4 \
+    -msse4.1 \
+    -msse4.2
+
 LOCAL_CPPFLAGS = \
     -std=c++11
+
+LOCAL_CPPFLAGS += \
+    -fexceptions
 
 LOCAL_C_INCLUDES = \
     $(LOCAL_PATH)/Source/GmmLib \
