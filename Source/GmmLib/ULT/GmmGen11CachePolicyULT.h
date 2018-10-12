@@ -19,30 +19,19 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ============================================================================*/
+
 #pragma once
 
-#ifdef __cplusplus
-#include "../GmmCachePolicyCommon.h"
+#include "GmmCachePolicyULT.h"
 
-namespace GmmLib
+class CTestGen11CachePolicy : public CTestCachePolicy
 {
-    class NON_PAGED_SECTION GmmGen9CachePolicy :
-        public GmmGen8CachePolicy
-    {
-        public:
-            uint32_t CurrentMaxMocsIndex;
-            uint32_t CurrentMaxL1HdcMocsIndex;
-            /* Constructors */
-            GmmGen9CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen8CachePolicy(pCachePolicy)
-            {
-            }
-            virtual ~GmmGen9CachePolicy()
-            {
-            }
+protected:
+    virtual void CheckL3CachePolicy();
+    virtual void CheckLlcEdramCachePolicy();
 
-            /* Function prototypes */
-            GMM_STATUS InitCachePolicy();
-            GMM_STATUS SetupPAT();
-    };
-}
-#endif // #ifdef __cplusplus
+public:
+    static void SetUpTestCase();
+    static void TearDownTestCase();
+};
+#pragma once

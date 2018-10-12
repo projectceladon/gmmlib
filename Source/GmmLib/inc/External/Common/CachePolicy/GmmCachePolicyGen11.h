@@ -26,23 +26,20 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 namespace GmmLib
 {
-    class NON_PAGED_SECTION GmmGen9CachePolicy :
-        public GmmGen8CachePolicy
+    class NON_PAGED_SECTION GmmGen11CachePolicy :
+        public GmmGen10CachePolicy
     {
         public:
-            uint32_t CurrentMaxMocsIndex;
-            uint32_t CurrentMaxL1HdcMocsIndex;
             /* Constructors */
-            GmmGen9CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen8CachePolicy(pCachePolicy)
+            GmmGen11CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen10CachePolicy(pCachePolicy)
             {
             }
-            virtual ~GmmGen9CachePolicy()
+            virtual ~GmmGen11CachePolicy()
             {
             }
 
             /* Function prototypes */
             GMM_STATUS InitCachePolicy();
-            GMM_STATUS SetupPAT();
     };
 }
 #endif // #ifdef __cplusplus

@@ -98,37 +98,19 @@ macro(GmmLibSetTargetConfig libTarget)
 
 endmacro()
 
-set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /W1 /WX-")
-set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /W1 /WX-")
+if(CMAKE_CONFIGURATION_TYPES)
+  set( CMAKE_CONFIGURATION_TYPES
+      "Debug"
+      "Release"
+      "ReleaseInternal")
 
-# GMMLIBsetLinkerFlags: apply linker flags for given configuration
-# linkerFlags: linker specific options
-# linkerTarget: optional parameter - apply linker flags for specfied target
-macro (GMMLIBsetLinkerFlags linkerFlags linkerTarget)
-    foreach (opt ${linkerFlags})
-        if ("${linkerTarget}" STREQUAL "")
-            set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${opt}")
-            set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${opt}")
-        else()
-            set (CMAKE_SHARED_LINKER_FLAGS_${linkerTarget} "${CMAKE_SHARED_LINKER_FLAGS_${linkerTarget}} ${opt}")
-            set (CMAKE_EXE_LINKER_FLAGS_${linkerTarget} "${CMAKE_SHARED_LINKER_FLAGS_${linkerTarget}} ${opt}")
-        endif()
-    endforeach()
-endmacro()
-
-set( CMAKE_CONFIGURATION_TYPES
-    "Debug"
-    "Release"
-    "ReleaseInternal")
-
-set( CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING
-    "Reset the configurations to what we need"
-    FORCE)
-
+  set( CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING
+       "Reset the configurations to what we need"
+       FORCE)
+endif()
 
 set(GMMLIB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-
-if ("${ARCH}" MATCHES "64")
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set (GMMLIB_ARCH "64")
 else()
     set (GMMLIB_ARCH "32")
@@ -154,17 +136,15 @@ MESSAGE("SourceConfiguration:")
 MESSAGE("CommonDir: ${BS_DIR_COMMON}")
 MESSAGE("IncDir: ${BS_DIR_INC}")
 
-# If we use GMM_REQUIRE_MESA_MOCS, and the MESA MOCS are not found, fail the
-# build instead of doing fallback to GMM defined values. It's required to
-# specify LIBDRM_SRC explicitly.
-if (DEFINED GMM_REQUIRE_MESA_MOCS)
-        if (NOT DEFINED GMM_LIBDRM_SRC)
-                message(FATAL_ERROR "Libdrm path not specified")
-        endif()
-
-        if (NOT EXISTS "${GMM_LIBDRM_SRC}/intel/intel_mocs_table.h")
-                message(FATAL_ERROR "MOCS not found in libdrm")
-        endif()
+# If '-DGMM_DYNAMIC_MOCS_TABLE=TRUE' (default is FALSE) passed to cmake
+# configure command gmmlib will generate MOCS table dynamically depending on
+# usage requests (Gen9+). In this case on Linux user responsibility is to
+# make sure that generated MOCS table is programmed on KMD level.
+if (GMM_DYNAMIC_MOCS_TABLE)
+    MESSAGE("MOCS table: dynamic")
+    add_definitions(-DGMM_DYNAMIC_MOCS_TABLE)
+else()
+    MESSAGE("MOCS table: static")
 endif()
 
 if(DEFINED UFO_DRIVER_OPTIMIZATION_LEVEL)
@@ -173,26 +153,16 @@ if(DEFINED UFO_DRIVER_OPTIMIZATION_LEVEL)
     endif()
 endif()
 
-# Includes are searched left-to-right, cmake add_definitions is appending,
-# if both files exist, user specified location (GMM_LIBDRM_SRC) will be used.
-if (EXISTS "${GMM_LIBDRM_SRC}/intel/intel_mocs_table.h")
-   add_definitions(-DHAVE_MESA_MOCS)
-   include_directories(${GMM_LIBDRM_SRC}/intel/)
-endif()
-
-if (EXISTS "/usr/include/libdrm/intel_mocs_table.h")
-        add_definitions(-DHAVE_MESA_MOCS)
-        include_directories(/usr/include/libdrm)
-endif()
-
 set(HEADERS_
 	${BS_DIR_GMMLIB}/CachePolicy/GmmCachePolicyConditionals.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmCachePolicyResourceUsageDefinitions.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmCachePolicyUndefineConditionals.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen10CachePolicy.h
+	${BS_DIR_GMMLIB}/CachePolicy/GmmGen11CachePolicy.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen8CachePolicy.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen9CachePolicy.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen10.h
+	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen11.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen8.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen9.h
 	${BS_DIR_GMMLIB}/inc/External/Common/GmmCachePolicy.h
@@ -218,9 +188,11 @@ set(HEADERS_
 	${BS_DIR_GMMLIB}/inc/External/Common/GmmUtil.h
 	${BS_DIR_GMMLIB}/inc/External/Linux/GmmResourceInfoLin.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen10Platform.h
+	${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen11Platform.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen8Platform.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen9Platform.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen10TextureCalc.h
+	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen11TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen7TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen8TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen9TextureCalc.h
@@ -235,6 +207,7 @@ set(UMD_HEADERS
 	${HEADERS_}
 	${BS_DIR_GMMLIB}/inc/External/Common/GmmClientContext.h
         ${BS_DIR_GMMLIB}/inc/External/Common/GmmLibDll.h
+        ${BS_DIR_GMMLIB}/inc/External/Common/GmmLibDllName.h
 	)
 
 
@@ -245,6 +218,8 @@ set(SOURCES_
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen8CachePolicy.cpp
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen9CachePolicy.cpp
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen10CachePolicy.cpp
+  ${BS_DIR_GMMLIB}/CachePolicy/GmmGen11CachePolicy.cpp
+  ${BS_DIR_GMMLIB}/Platform/GmmGen11Platform.cpp
   ${BS_DIR_GMMLIB}/Platform/GmmGen8Platform.cpp
   ${BS_DIR_GMMLIB}/Platform/GmmGen9Platform.cpp
   ${BS_DIR_GMMLIB}/Platform/GmmGen10Platform.cpp
@@ -257,6 +232,7 @@ set(SOURCES_
   ${BS_DIR_GMMLIB}/Texture/GmmGen8Texture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmGen9Texture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmGen10Texture.cpp
+  ${BS_DIR_GMMLIB}/Texture/GmmGen11Texture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTexture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTextureAlloc.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTextureSpecialCases.cpp
@@ -278,6 +254,7 @@ set(UMD_SOURCES
 source_group("Source Files\\Cache Policy\\Client Files" FILES
 			${BS_DIR_GMMLIB}/CachePolicy/GmmCachePolicyResourceUsageDefinitions.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen10CachePolicy.h
+			${BS_DIR_GMMLIB}/CachePolicy/GmmGen11CachePolicy.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen8CachePolicy.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen9CachePolicy.h
 			)
@@ -323,6 +300,7 @@ source_group("Header Files" FILES
 
 source_group("Header Files\\External\\Common\\Cache Policy" FILES
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen10.h
+			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen11.h
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen8.h
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen9.h
 			)
@@ -338,12 +316,14 @@ source_group("Header Files\\Internal\\Common" FILES
 
 source_group("Header Files\\Internal\\Common\\Platform" FILES
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen10Platform.h
+			${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen11Platform.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen8Platform.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Platform/GmmGen9Platform.h
 			)
 
 source_group("Header Files\\Internal\\Common\\Texture" FILES
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen10TextureCalc.h
+			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen11TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen7TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen8TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen9TextureCalc.h
@@ -381,27 +361,6 @@ set(headers
     ${SOURCES_}
   )
 
-#clear all default-cmake settings
-SET (CMAKE_SHARED_LINKER_FLAGS_RELEASEINTERNAL "")
-SET (CMAKE_SHARED_LINKER_FLAGS_RELEASE "")
-SET (CMAKE_SHARED_LINKER_FLAGS_DEBUG "")
-SET (CMAKE_SHARED_LINKER_FLAGS "")
-
-SET (CMAKE_EXE_LINKER_FLAGS "")
-SET (CMAKE_EXE_LINKER_FLAGS_DEBUG "")
-SET (CMAKE_EXE_LINKER_FLAGS_RELEASEINTERNAL "")
-SET (CMAKE_EXE_LINKER_FLAGS_RELEASE "")
-
-SET (CMAKE_STATIC_LINKER_FLAGS "")
-SET (CMAKE_LOCAL_LINKER_FLAGS "")
-
-SET (CMAKE_CXX_STANDARD_LIBRARIES "")
-SET (CMAKE_C_STANDARD_LIBRARIES "")
-
-SET (CMAKE_CXX_FLAGS_RELEASEINTERNAL "")
-SET (CMAKE_CXX_FLAGS_DEBUG  "")
-SET (CMAKE_CXX_FLAGS_RELEASE "")
-
 # set compiler options
 if(MSVC)
 	include(Windows.cmake)
@@ -422,9 +381,9 @@ endforeach()
 ###################################################################################
 add_library( ${GMM_LIB_DLL_NAME} SHARED igdgmm.rc ${UMD_SOURCES} ${UMD_HEADERS})
 
-set_target_properties(${GMM_LIB_DLL_NAME} PROPERTIES OUTPUT_NAME "igdgmm${ARCH}")
-
 if(MSVC)
+
+set_target_properties(${GMM_LIB_DLL_NAME} PROPERTIES OUTPUT_NAME "igdgmm${GMMLIB_ARCH}")
 
 bs_set_wdk(${GMM_LIB_DLL_NAME})
 GmmLibSetTargetConfig( ${GMM_LIB_DLL_NAME} )
@@ -436,7 +395,11 @@ windows_umd_props_universal(${GMM_LIB_DLL_NAME})
 target_link_libraries( ${GMM_LIB_DLL_NAME}
             onecoreuap.lib
         )
+else()
+	set_target_properties(${GMM_LIB_DLL_NAME} PROPERTIES OUTPUT_NAME "igdgmm")
+
 endif()
+
 
 ###################################################################################
 # End of DLL create library
@@ -529,14 +492,15 @@ bs_set_extra_target_properties(${GMM_LIB_DLL_NAME}
 	UNUSED_ISTDLIB_MT
 	GMM_UNIFIED_LIB
 	GMM_LIB_DLL
+        GMM_LIB_DLL_EXPORTS
 )
 
-if("${ARCH}" MATCHES "64")
+if("${GMMLIB_ARCH}" MATCHES "64")
 	bs_set_extra_target_properties(${GMM_LIB_DLL_NAME}
 		_X64)
 endif()
 
-if(ARCH EQUAL 32)
+if("${GMMLIB_ARCH}" MATCHES "32")
 	#bs_set_extra_target_properties(igfx_gmmumd_ocl UNUSED_ISTDLIB_MT)
 
 	if((CMAKE_BUILD_TYPE STREQUAL "Release") OR (CMAKE_BUILD_TYPE STREQUAL "ReleaseInternal"))
@@ -544,4 +508,132 @@ if(ARCH EQUAL 32)
 	endif()
 endif()
 
-add_subdirectory(ULT)
+if(NOT DEFINED RUN_TEST_SUITE OR RUN_TEST_SUITE)
+    add_subdirectory(ULT)
+endif()
+
+set (GMM_UMD_DLL "igdgmm")
+
+include(os_release_info.cmake)
+
+get_os_release_info(os_name os_version)
+
+if("${os_name}" STREQUAL "clear-linux-os")
+    # clear-linux-os distribution avoids /etc for distribution defaults.
+    # Set this variable explicitly before including GNUInstallDirs.
+    set(CMAKE_INSTALL_SYSCONFDIR "usr/share/defaults/etc")
+endif()
+
+if(UNIX)
+    include(GNUInstallDirs)
+
+    if(NOT DEFINED MAJOR_VERSION)
+        set(MAJOR_VERSION 0)
+    endif()
+
+    if(NOT DEFINED MINOR_VERSION)
+        set(MINOR_VERSION 1)
+    endif()
+
+    if(NOT DEFINED PATCH_VERSION)
+        set(PATCH_VERSION 0)
+    endif()
+
+    configure_file(${BS_DIR_GMMLIB}/igdgmm.h.in ${CMAKE_BINARY_DIR}/igdgmm.h)
+    configure_file(${BS_DIR_GMMLIB}/igdgmm.pc.in ${CMAKE_BINARY_DIR}/igdgmm.pc @ONLY)
+
+    install(TARGETS ${GMM_LIB_DLL_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT gmmlib)
+    install(TARGETS gmm_umd DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT gmmlib)
+
+    install(DIRECTORY ${BS_DIR_GMMLIB} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/igdgmm COMPONENT gmmlib-devel
+        FILES_MATCHING PATTERN "*.h"
+        PATTERN "*.hpp"
+        PATTERN "Internal" EXCLUDE
+        PATTERN "ULT" EXCLUDE)
+
+    install (DIRECTORY ${BS_DIR_INC} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/igdgmm COMPONENT gmmlib-devel
+        FILES_MATCHING PATTERN "*.h"
+        PATTERN "*.hpp")
+
+    install (DIRECTORY ${BS_DIR_UTIL} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/igdgmm COMPONENT gmmlib-devel
+        FILES_MATCHING PATTERN "*.h"
+        PATTERN "*.hpp")
+
+    install (FILES ${BS_DIR_GMMLIB}/Utility/CpuSwizzleBlt/CpuSwizzleBlt.c
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/igdgmm/GmmLib/Utility/CpuSwizzleBlt/ COMPONENT gmmlib-devel)
+
+    install(FILES ${CMAKE_BINARY_DIR}/igdgmm.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig COMPONENT gmmlib-devel)
+    install(FILES ${CMAKE_BINARY_DIR}/igdgmm.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/igdgmm COMPONENT gmmlib-devel)
+
+    if(GMMLIB_CPACK_GENERATOR)
+        set(CPACK_GENERATOR "${GMMLIB_CPACK_GENERATOR}")
+    else()
+        # If generators list was not define build native package for current distro
+        if(EXISTS "/etc/debian_version")
+        set(CPACK_GENERATOR "DEB")
+        elseif(EXISTS "/etc/redhat-release")
+        set(CPACK_GENERATOR "RPM")
+        else()
+        set(CPACK_GENERATOR "TXZ")
+        endif()
+    endif()
+
+    set(CPACK_PACKAGE_NAME "intel")
+    set(CPACK_PACKAGE_VENDOR "Intel Corporation")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Intel(R) Graphics Memory Management Library Package")
+
+    set(CPACK_PACKAGE_VERSION_MAJOR ${MAJOR_VERSION})
+    set(CPACK_PACKAGE_VERSION_MINOR ${MINOR_VERSION})
+    set(CPACK_PACKAGE_VERSION_PATCH ${PATCH_VERSION})
+    set(CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY ${GMMLIB_INSTALL_TIME_ROOT_DIR})
+    set(CPACK_SET_DESTDIR TRUE)
+    set(CPACK_PACKAGE_RELOCATABLE FALSE)
+
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Intel")
+    set(CPACK_DEBIAN_COMPRESSION_TYPE "xz")
+
+    set(CPACK_RPM_PACKAGE_ARCHITECTURE "x86_64")
+    set(CPACK_RPM_COMPRESSION_TYPE "xz")
+
+    string(TOLOWER "${BUILD_TYPE}.${CPACK_RPM_PACKAGE_ARCHITECTURE}" PACKAGE_TYPE)
+
+    # Create Distro OS initial based on 1st-2nd letter of string
+    # or label "generic" for unsupported/unknown distros for CPACK_PACKAGE_FILE_NAME
+    if("${os_name}" STREQUAL "ubuntu")
+        set(DISTRO_INFO "u${os_version}")
+        string(TOLOWER "${BUILD_TYPE}.${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" PACKAGE_TYPE)
+    elseif("${os_name}" STREQUAL "fedora")
+        set(DISTRO_INFO "f${os_version}")
+    elseif("${os_name}" STREQUAL "clear-linux-os")
+        set(DISTRO_INFO "cl${os_version}")
+    elseif("${os_name}" STREQUAL "centos")
+        set(DISTRO_INFO "ce${os_version}")
+    else()
+        set(DISTRO_INFO "generic")
+    endif()
+
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}")
+
+    set(CPACK_DEBIAN_GMMLIB_FILE_NAME "intel-gmmlib_${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}.deb")
+    set(CPACK_DEBIAN_GMMLIB-DEVEL_FILE_NAME "intel-gmmlib-devel_${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}.deb")
+    set(CPACK_DEBIAN_GMMLIB-DEVEL_PACKAGE_DEPENDS "intel-gmmlib (=${CPACK_PACKAGE_VERSION})")
+
+    set(CPACK_RPM_GMMLIB_FILE_NAME "intel-gmmlib_${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}.rpm")
+    set(CPACK_RPM_GMMLIB-DEVEL_FILE_NAME "intel-gmmlib-devel_${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}.rpm")
+    set(CPACK_RPM_GMMLIB-DEVEL_PACKAGE_DEPENDS "intel-gmmlib (=${CPACK_PACKAGE_VERSION})")
+
+    set(CPACK_ARCHIVE_GMMLIB_FILE_NAME "intel-gmmlib-${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}")
+    set(CPACK_ARCHIVE_GMMLIB-DEVEL_FILE_NAME "intel-gmmlib-devel-${CPACK_PACKAGE_VERSION}-${DISTRO_INFO}-${PACKAGE_TYPE}")
+
+    set(CPACK_COMPONENT_INSTALL ON)
+    set(CPACK_DEB_COMPONENT_INSTALL ON)
+    set(CPACK_RPM_COMPONENT_INSTALL ON)
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+    set(CPACK_COMPONENTS_ALL gmmlib gmmlib-devel)
+
+    include (CPack)
+
+endif()

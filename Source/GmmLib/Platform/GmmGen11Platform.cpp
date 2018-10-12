@@ -19,30 +19,22 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ============================================================================*/
-#pragma once
 
-#ifdef __cplusplus
-#include "../GmmCachePolicyCommon.h"
+#include "Internal/Common/GmmLibInc.h"
+#include "Internal/Common/Platform/GmmGen10Platform.h"
+#include "Internal/Common/Platform/GmmGen11Platform.h"
 
-namespace GmmLib
+GmmLib::PlatformInfoGen11::PlatformInfoGen11(PLATFORM &Platform)
+    : PlatformInfoGen10(Platform)
 {
-    class NON_PAGED_SECTION GmmGen9CachePolicy :
-        public GmmGen8CachePolicy
-    {
-        public:
-            uint32_t CurrentMaxMocsIndex;
-            uint32_t CurrentMaxL1HdcMocsIndex;
-            /* Constructors */
-            GmmGen9CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen8CachePolicy(pCachePolicy)
-            {
-            }
-            virtual ~GmmGen9CachePolicy()
-            {
-            }
 
-            /* Function prototypes */
-            GMM_STATUS InitCachePolicy();
-            GMM_STATUS SetupPAT();
-    };
+    Data.SurfaceMaxSize                      = GMM_GBYTE(16384);
+    Data.MaxGpuVirtualAddressBitsPerResource = 44;
+
+    //Override CCS MaxPitch requirement
+    if(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ICELAKE)
+    {
+        Data.TexAlign.CCS.MaxPitchinTiles = 1024;
+    }
+
 }
-#endif // #ifdef __cplusplus
