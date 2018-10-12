@@ -27,25 +27,26 @@ OTHER DEALINGS IN THE SOFTWARE.
 //===========================================================================
 #ifdef GMM_LIB_DLL                                      /* To be defined by Clients if GMMlib needs to be in DLL/so */
 
-#ifdef _DEBUG
-    #define GMM_INLINE_VIRTUAL              virtual     // inline functions are made virtual for Debug version of Gmmlib Dll to export them from Dll
-                                                        // For RI and Release, inline functions can be exported from DLL without being made virtual
-#else
-    #define GMM_INLINE_VIRTUAL
-#endif
+#define GMM_INLINE_VIRTUAL              virtual
 
 #define GMM_VIRTUAL                     virtual
 
+#define GMM_INLINE_EXPORTED                                            /* Macro To avoid inlining of exported member functions in Clients code in DLL mode*/
+
 #ifdef _WIN32
 
-#ifdef GMM_LIB_DLL_EXPORTS      /* To be defined for WIN32 only*/
-    #define GMM_LIB_API                     __declspec(dllexport)   /* Macro to define GMM Lib DLL exports */
-#else
-    #define GMM_LIB_API                     __declspec(dllimport)       /* Macro to define GMM Lib DLL imports */
-#endif  /* GMM_LIB_DLL_EXPORTS */
+    #ifdef GMM_LIB_DLL_EXPORTS
+        #define GMM_LIB_API                     __declspec(dllexport)   /* Macro to define GMM Lib DLL exports */
+    #else
+        #define GMM_LIB_API                     __declspec(dllimport)       /* Macro to define GMM Lib DLL imports */
+    #endif  /* GMM_LIB_DLL_EXPORTS */
 
-#else // Linux doesnt need declspec macro
-    #define GMM_LIB_API
+#else // Linux
+    #ifdef GMM_LIB_DLL_EXPORTS
+        #define GMM_LIB_API                     __attribute__ ((visibility ("default")))
+    #else
+        #define GMM_LIB_API
+    #endif
 #endif
 
 #else // !GMM_LIB_DLL
@@ -53,6 +54,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define GMM_INLINE_VIRTUAL
 #define GMM_VIRTUAL
 #define GMM_LIB_API
+#define GMM_INLINE_EXPORTED __inline
 
 #endif  /* GMM_LIB_DLL */
 

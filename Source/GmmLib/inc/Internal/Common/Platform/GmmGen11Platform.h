@@ -20,29 +20,17 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ============================================================================*/
 #pragma once
+#include "GmmGen10Platform.h"
 
 #ifdef __cplusplus
-#include "../GmmCachePolicyCommon.h"
-
 namespace GmmLib
 {
-    class NON_PAGED_SECTION GmmGen9CachePolicy :
-        public GmmGen8CachePolicy
+    class NON_PAGED_SECTION PlatformInfoGen11 : public PlatformInfoGen10
     {
-        public:
-            uint32_t CurrentMaxMocsIndex;
-            uint32_t CurrentMaxL1HdcMocsIndex;
-            /* Constructors */
-            GmmGen9CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen8CachePolicy(pCachePolicy)
-            {
-            }
-            virtual ~GmmGen9CachePolicy()
-            {
-            }
-
-            /* Function prototypes */
-            GMM_STATUS InitCachePolicy();
-            GMM_STATUS SetupPAT();
+    public:
+        PlatformInfoGen11(PLATFORM &Platform);
+        ~PlatformInfoGen11() {};
     };
 }
-#endif // #ifdef __cplusplus
+
+#endif
