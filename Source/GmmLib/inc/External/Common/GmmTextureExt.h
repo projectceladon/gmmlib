@@ -136,6 +136,7 @@ typedef struct GMM_TEXTURE_INFO_REC
     uint32_t                Depth;
     uint32_t                MaxLod;
     uint32_t                ArraySize;
+    uint32_t                CpTag;
 
     struct{
         GMM_RESOURCE_USAGE_TYPE Usage;
@@ -208,6 +209,14 @@ GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO* pTexInfo, GMM_REQ_OFFSET_INFO
         (TileInfo).LogicalTileWidth = 0;        \
         (TileInfo).MaxPitch = 0;                \
 }
+
+#define GMM_IS_4KB_TILE(Flags)  ((Flags).Info.TiledY)
+#define GMM_IS_64KB_TILE(Flags) (Flags.Info.TiledYs)
+
+#define GMM_SET_4KB_TILE(Flags, Value) ((Flags).Info.TiledY = (Value))
+#define GMM_SET_64KB_TILE(Flags, Value) ((Flags).Info.TiledYs = (Value))
+#define GMM_SET_4KB_TILE_MODE(TileMode) (TileMode = LEGACY_TILE_Y)
+#define GMM_IS_TILEY (pClientContext->GetSkuTable().FtrTileY)
 
 // Reset packing alignment to project default
 #pragma pack(pop)
