@@ -59,7 +59,7 @@ LOCAL_SRC_FILES = \
     Source/Common/AssertTracer/AssertTracer.cpp \
 
 LOCAL_CFLAGS = \
-    -DGMM_DYNAMIC_MOCS_TABLE \
+    -DGMM_DYNAMIC_MOCS_TABLE=true \
     -DGMM_LIB_DLL \
     -DGMM_LIB_DLL_EXPORTS \
     -DGMM_UNIFIED_LIB \
