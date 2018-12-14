@@ -66,6 +66,7 @@ typedef struct _SKU_FEATURE_TABLE
         unsigned int   FtrVERing    : 1;  // Separate Ring for VideoEnhancement commands
         unsigned int   FtrVcs2      : 1;  // Second VCS engine supported on Gen8 to Gen10 (in some configurations);
         unsigned int   FtrLCIA      : 1;  // Indicates Atom (Low Cost Intel Architecture)
+        unsigned int   FtrTileY     : 1;  // Identifies Legacy tiles TileY/Yf/Ys on the platform
     };
 
 
@@ -88,6 +89,7 @@ typedef struct _SKU_FEATURE_TABLE
         unsigned int   FtrStandardMipTailFormat         : 1;  // Dx Standard MipTail Format for TileYf/Ys
         unsigned int   FtrWddm2_1_64kbPages             : 1;  // WDDMv2.1 64KB page support
         unsigned int   FtrFrameBufferLLC                : 1;  // Displayable Frame buffers cached in LLC
+        unsigned int   FtrDriverFLR                     : 1;  // Enable Function Level Reset (Gen11+)
     };
 
 
@@ -433,6 +435,12 @@ typedef struct _WA_TABLE
         WA_DECLARE(
         WaAlignYUVResourceToLCU,
         "source and recon surfaces need to be aligned to the LCU size",
+        WA_BUG_TYPE_CORRUPTION,
+        WA_BUG_PERF_IMPACT_UNKNOWN, WA_COMPONENT_GMM)
+
+        WA_DECLARE(
+        Wa32bppTileY2DColorNoHAlign4,
+        "Wa to defeature HALIGN_4 for 2D 32bpp RT surfaces, due to bug introduced from daprsc changes to help RCPB generate correct offsets to deal with cam match",
         WA_BUG_TYPE_CORRUPTION,
         WA_BUG_PERF_IMPACT_UNKNOWN, WA_COMPONENT_GMM)
 

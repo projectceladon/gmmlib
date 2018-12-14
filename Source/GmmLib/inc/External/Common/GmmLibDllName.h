@@ -21,28 +21,25 @@ OTHER DEALINGS IN THE SOFTWARE.
 ============================================================================*/
 #pragma once
 
-#ifdef __cplusplus
-#include "../GmmCachePolicyCommon.h"
+#if defined(_WIN64 ) || defined(__x86_64__) || defined(__LP64__)
+    #define GMM_ENTRY_NAME      "OpenGmm"
+    #define GMM_INIT_NAME       "GmmInit"
+    #define GMM_DESTROY_NAME    "GmmDestroy"
 
-namespace GmmLib
-{
-    class NON_PAGED_SECTION GmmGen9CachePolicy :
-        public GmmGen8CachePolicy
-    {
-        public:
-            uint32_t CurrentMaxMocsIndex;
-            uint32_t CurrentMaxL1HdcMocsIndex;
-            /* Constructors */
-            GmmGen9CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen8CachePolicy(pCachePolicy)
-            {
-            }
-            virtual ~GmmGen9CachePolicy()
-            {
-            }
+    #if defined(_WIN64)
+        #define GMM_UMD_DLL     "igdgmm64.dll"
+    #else
+        #define GMM_UMD_DLL     "libigdgmm.so"
+    #endif
+#else
+    #define GMM_ENTRY_NAME      "_OpenGmm@4"
 
-            /* Function prototypes */
-            GMM_STATUS InitCachePolicy();
-            GMM_STATUS SetupPAT();
-    };
-}
-#endif // #ifdef __cplusplus
+    #define GMM_INIT_NAME       "_GmmInit@48"
+    #define GMM_DESTROY_NAME    "_GmmDestroy@4"
+
+    #if defined(_WIN32)
+        #define GMM_UMD_DLL     "igdgmm32.dll"
+    #else
+        #define GMM_UMD_DLL     "libigdgmm.so"
+    #endif
+#endif
