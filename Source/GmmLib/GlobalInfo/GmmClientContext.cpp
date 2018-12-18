@@ -140,7 +140,7 @@ uint32_t GMM_STDCALL GmmLib::GmmClientContext::CachePolicyGetMaxSpecialMocsIndex
 ///
 /// @return     Const GMM_CACHE_POLICY_ELEMENT Table
 /////////////////////////////////////////////////////////////////////////////////////
-const GMM_CACHE_POLICY_ELEMENT *GMM_STDCALL GmmLib::GmmClientContext::GetCachePolicyUsage()
+GMM_CACHE_POLICY_ELEMENT *GMM_STDCALL GmmLib::GmmClientContext::GetCachePolicyUsage()
 {
     return (pGmmGlobalContext->GetCachePolicyUsage());
 }
@@ -187,6 +187,18 @@ GMM_CACHE_POLICY_TBL_ELEMENT GMM_STDCALL GmmLib::GmmClientContext::GetCachePolic
 GMM_PLATFORM_INFO &GMM_STDCALL GmmLib::GmmClientContext::GetPlatformInfo()
 {
     return pGmmGlobalContext->GetPlatformInfo();
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for getting Alignment info
+///
+/// @return     void
+//////////////////////////////////////////////////////////////////////////////////
+void GMM_STDCALL GmmLib::GmmClientContext::GetExtendedTextureAlign(uint32_t Mode, ALIGNMENT &UnitAlign)
+{
+    ALIGNMENT AlignInfo;
+    pGmmGlobalContext->GetPlatformInfoObj()->ApplyExtendedTexAlign(Mode, AlignInfo);
+    UnitAlign = AlignInfo;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -247,21 +259,29 @@ uint8_t GMM_STDCALL GmmLib::GmmClientContext::IsYUVPacked(GMM_RESOURCE_FORMAT Fo
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
-/// Member function of ClientContext class for getting the Tile dimensions
-/// for the given Tile mode
+/// Member function of ClientContext class for returning its GMM_SURFACESTATE_FORMAT
+/// for the given equivalent GMM_RESOURCE_FORMAT type
+///
+/// @return     GMM_SURFACESTATE_FORMAT for the given format type
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_SURFACESTATE_FORMAT GMM_STDCALL GmmLib::GmmClientContext::GetSurfaceStateFormat(GMM_RESOURCE_FORMAT Format)
+{
+    // ToDo: Remove the definition of GmmGetSurfaceStateFormat(Format)
+    return ((Format > GMM_FORMAT_INVALID) &&
+            (Format < GMM_RESOURCE_FORMATS)) ?
+           pGmmGlobalContext->GetPlatformInfo().FormatTable[Format].SurfaceStateFormat :
+           GMM_SURFACESTATE_FORMAT_INVALID;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class to return InternalGpuVaMax value
+/// stored in pGmmGlobalContext
 ///
 /// @return    GMM_SUCCESS
 /////////////////////////////////////////////////////////////////////////////////////
-GMM_STATUS GMM_STDCALL GmmLib::GmmClientContext::GetLogicalTileShape(uint32_t  TileMode,
-                                                                     uint32_t *pWidthInBytes,
-                                                                     uint32_t *pHeight,
-                                                                     uint32_t *pDepth)
+uint64_t GMM_STDCALL GmmLib::GmmClientContext::GetInternalGpuVaRangeLimit()
 {
-#ifdef _WIN32
-    return GmmGetLogicalTileShape(TileMode, pWidthInBytes, pHeight, pDepth);
-#else
-    return GMM_SUCCESS;
-#endif
+    return pGmmGlobalContext->GetInternalGpuVaRangeLimit();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -325,10 +345,17 @@ ERROR_CASE:
 GMM_RESOURCE_INFO *GMM_STDCALL GmmLib::GmmClientContext::CopyResInfoObject(GMM_RESOURCE_INFO *pSrcRes)
 {
     GMM_RESOURCE_INFO *pResCopy = NULL;
+    GmmClientContext * pClientContextIn = NULL;
+
+#if(!defined(GMM_UNIFIED_LIB))
+    pClientContextIn = pGmmGlobalContext->pGmmGlobalClientContext;
+#else
+    pClientContextIn = this;
+#endif
 
     __GMM_ASSERTPTR(pSrcRes, NULL);
 
-    pResCopy = new GMM_RESOURCE_INFO;
+    pResCopy = new GMM_RESOURCE_INFO(pClientContextIn);
     if(!pResCopy)
     {
         GMM_ASSERTDPF(0, "Allocation failed.");
@@ -353,9 +380,17 @@ GMM_RESOURCE_INFO *GMM_STDCALL GmmLib::GmmClientContext::CopyResInfoObject(GMM_R
 /////////////////////////////////////////////////////////////////////////////////////
 void GMM_STDCALL GmmLib::GmmClientContext::ResMemcpy(void *pDst, void *pSrc)
 {
+     GmmClientContext *pClientContextIn = NULL;
+
+#if(!defined(GMM_UNIFIED_LIB))
+    pClientContextIn = pGmmGlobalContext->pGmmGlobalClientContext;
+#else
+    pClientContextIn = this;
+#endif
+
     GMM_RESOURCE_INFO *pResSrc = reinterpret_cast<GMM_RESOURCE_INFO *>(pSrc);
     // Init memory correctly, in case the pointer is a raw memory pointer
-    GMM_RESOURCE_INFO *pResDst = new(pDst) GMM_RESOURCE_INFO();
+    GMM_RESOURCE_INFO *pResDst = new(pDst) GMM_RESOURCE_INFO(pClientContextIn);
 
     *pResDst = *pResSrc;
 }
