@@ -84,7 +84,7 @@ namespace GmmLib
         /// Returns the GMM_CLIENT Type that has created this ClientContext.
         /// @return     GMM_CLIENT
         /////////////////////////////////////////////////////////////////////////////////////
-        GMM_INLINE_VIRTUAL GMM_INLINE GMM_CLIENT GMM_STDCALL  GetClientType()
+        GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_CLIENT GMM_STDCALL  GetClientType()
         {
             return (ClientType);
         }
@@ -98,21 +98,20 @@ namespace GmmLib
         GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxMocsIndex();
         GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxL1HdcMocsIndex();
         GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxSpecialMocsIndex();
-        GMM_VIRTUAL const GMM_CACHE_POLICY_ELEMENT*     GMM_STDCALL GetCachePolicyUsage();
+        GMM_VIRTUAL GMM_CACHE_POLICY_ELEMENT*           GMM_STDCALL GetCachePolicyUsage();
         GMM_VIRTUAL void                                GMM_STDCALL GetCacheSizes(GMM_CACHE_SIZES *pCacheSizes);
         GMM_VIRTUAL GMM_CACHE_POLICY_ELEMENT            GMM_STDCALL GetCachePolicyElement(GMM_RESOURCE_USAGE_TYPE Usage);
         GMM_VIRTUAL GMM_CACHE_POLICY_TBL_ELEMENT        GMM_STDCALL GetCachePolicyTlbElement(uint32_t  MocsIdx);
         GMM_VIRTUAL GMM_PLATFORM_INFO&                  GMM_STDCALL GetPlatformInfo();
+        GMM_VIRTUAL void                                GMM_STDCALL GetExtendedTextureAlign(uint32_t Mode, ALIGNMENT &UnitAlign);
 
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsPlanar(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsP0xx(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsUVPacked(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsCompressed(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsYUVPacked(GMM_RESOURCE_FORMAT Format);
-        GMM_VIRTUAL GMM_STATUS                          GMM_STDCALL GetLogicalTileShape(uint32_t             TileMode,
-                                                                                        uint32_t             *pWidthInBytes,
-                                                                                        uint32_t             *pHeight,
-                                                                                        uint32_t             *pDepth);
+        GMM_VIRTUAL GMM_SURFACESTATE_FORMAT             GMM_STDCALL GetSurfaceStateFormat(GMM_RESOURCE_FORMAT Format);
+        GMM_VIRTUAL uint64_t                            GMM_STDCALL GetInternalGpuVaRangeLimit();
 
         /* ResourceInfo Creation and Destroy API's */
         GMM_VIRTUAL GMM_RESOURCE_INFO* GMM_STDCALL       CreateResInfoObject(GMM_RESCREATE_PARAMS *pCreateParams);

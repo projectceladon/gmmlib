@@ -22,16 +22,17 @@ https://opensource.org/licenses/MIT
 Building
 ========
 
-1) Get gmmlib repo, make it look like
-	<workspace>
+1) Get gmmlib repo
 
-       |- GmmLib
-       
-2) $ mkdir <workspace>/build
+       |- gmmlib
 
-3) $ cd <workspace>/build
+2) Change it to root directory
 
-4) cmake [-DCMAKE_BUILD_TYPE= Release | Debug | ReleaseInternal] [-DARCH= 64 | 32]  ../GmmLib
+   $ cd gmmlib
+
+3) $ mkdir build && cd build
+
+4) cmake [-DCMAKE_BUILD_TYPE= Release | Debug | ReleaseInternal] [-DARCH= 64 | 32]  ..
 
 5) $ make -j8 ( Also performs compile time ULT)
 
@@ -43,19 +44,20 @@ GmmLib is build as static library for Intel media driver and Compute runtime for
 
 Supported Platforms
 -------------------
-Intel Atom and Core Processors supporting Gen9/Gen10 graphics devices
+Intel Atom and Core Processors supporting Gen8/Gen9/Gen10 graphics devices
 
 BDW (Broadwell)
 
-SKL (Skylake)
+SKL (Skylake, Kaby Lake, Coffee Lake)
+
+BXT (Broxton) / APL (Apollolake)
 
 CNL (Cannonlake)
-
 
 
 Known Issues and Limitations
 ----------------------------
 - Current Gmmlib support only limited to Linux
 
-(*) Other names and brands my be claimed as property of others.
+(*) Other names and brands may be claimed as property of others.
 ---------------------------------------------------------------

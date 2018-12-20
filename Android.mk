@@ -27,6 +27,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/CachePolicy/GmmCachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmCachePolicyCommon.cpp \
     Source/GmmLib/CachePolicy/GmmGen10CachePolicy.cpp \
+    Source/GmmLib/CachePolicy/GmmGen11CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen8CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen9CachePolicy.cpp \
     Source/GmmLib/GlobalInfo/GmmClientContext.cpp \
@@ -34,6 +35,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/GlobalInfo/GmmLibDllMain.cpp \
     Source/GmmLib/GlobalInfo/GmmOldApi.cpp \
     Source/GmmLib/Platform/GmmGen10Platform.cpp \
+    Source/GmmLib/Platform/GmmGen11Platform.cpp \
     Source/GmmLib/Platform/GmmGen8Platform.cpp \
     Source/GmmLib/Platform/GmmGen9Platform.cpp \
     Source/GmmLib/Platform/GmmPlatform.cpp \
@@ -42,6 +44,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/Resource/GmmResourceInfoCommonEx.cpp \
     Source/GmmLib/Resource/GmmRestrictions.cpp \
     Source/GmmLib/Texture/GmmGen10Texture.cpp \
+    Source/GmmLib/Texture/GmmGen11Texture.cpp \
     Source/GmmLib/Texture/GmmGen7Texture.cpp \
     Source/GmmLib/Texture/GmmGen8Texture.cpp \
     Source/GmmLib/Texture/GmmGen9Texture.cpp \
@@ -56,18 +59,23 @@ LOCAL_SRC_FILES = \
     Source/Common/AssertTracer/AssertTracer.cpp \
 
 LOCAL_CFLAGS = \
-    -DGMM_OGL \
+    -DGMM_DYNAMIC_MOCS_TABLE \
+    -DGMM_LIB_DLL \
+    -DGMM_LIB_DLL_EXPORTS \
+    -DGMM_UNIFIED_LIB \
     -DGMM_UNIFY_DAF_API \
+    -DISTDLIB_UMD \
     -DSMALL_POOL_ALLOC \
     -DUNUSED_ISTDLIB_MT \
     -D_ATL_NO_WIN_SUPPORT \
-    -D_RELEASE \
+    -D_X64 \
     -D__GFX_MACRO_C__ \
     -D__GMM \
     -D__STDC_CONSTANT_MACROS \
     -D__STDC_LIMIT_MACROS \
     -D__UMD \
-	-Wno-error
+    -Wno-error \
+    -Digfx_gmmumd_dll_EXPORTS
 
 LOCAL_CFLAGS += \
     -msse4 \
@@ -90,13 +98,15 @@ LOCAL_C_INCLUDES = \
     $(LOCAL_PATH)/Source/GmmLib/Texture \
     $(LOCAL_PATH)/Source/GmmLib/Resource \
     $(LOCAL_PATH)/Source/GmmLib/Platform \
+    $(LOCAL_PATH)/Source/util \
     $(LOCAL_PATH)/Source/inc \
     $(LOCAL_PATH)/Source/inc/common \
     $(LOCAL_PATH)/Source/inc/umKmInc \
-    $(LOCAL_PATH)/Source/install \
+    $(LOCAL_PATH)/Source/install
 
 LOCAL_EXPORT_C_INCLUDE_DIRS = \
     $(LOCAL_PATH)/Source/GmmLib/inc \
     $(LOCAL_PATH)/Source/inc \
+    $(LOCAL_PATH)/Source/inc/common \
 
-include $(BUILD_STATIC_LIBRARY)
+include $(BUILD_SHARED_LIBRARY)

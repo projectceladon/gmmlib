@@ -24,14 +24,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include "GmmCommonExt.h"
 #include "GmmInfo.h"
 
-#ifdef _X64
-#define GMM_UMD_DLL     "igdgmm64.dll"
-#else
-#define GMM_UMD_DLL     "igdgmm32.dll"
-#endif
-
-#define GMM_ENTRY_NAME "OpenGmm"
-
 // Interfaces exported from  GMM Lib DLL
 typedef struct _GmmExportEntries
 {
