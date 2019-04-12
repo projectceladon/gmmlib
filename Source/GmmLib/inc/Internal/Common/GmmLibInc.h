@@ -34,7 +34,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include "External/Common/GmmPlatformExt.h"
 #include "External/Common/GmmCachePolicy.h"
 #include "External/Common/GmmResourceInfoExt.h"
-#include "External/Common/GmmGttExt.h"
 #include "../Platform/GmmPlatforms.h"
 #include "Platform/GmmGen8Platform.h"
 #include "Platform/GmmGen9Platform.h"
@@ -49,7 +48,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include "External/Common/GmmInfo.h"
 #include "../Utility/GmmUtility.h"
 
-#include "External/Common/GmmProto.h"                   // TBD: Move internal GmmLib protos
 #include "External/Common/GmmDebug.h"                   // Unified Definitions of GMM_ASSERT and GMM_DEBUG Macros
 
 #ifndef DXGKDDI_INTERFACE_VERSION_WDDM1_3

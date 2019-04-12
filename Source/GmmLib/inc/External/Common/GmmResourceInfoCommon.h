@@ -85,43 +85,12 @@ namespace GmmLib
             /* Function prototypes */
             GMM_VIRTUAL bool                IsPresentableformat();
             // Move GMM Restrictions to it's own class?
-            GMM_VIRTUAL void                GetGenericRestrictions(__GMM_BUFFER_TYPE *pBuff);
-            GMM_VIRTUAL __GMM_BUFFER_TYPE*  GetBestRestrictions(__GMM_BUFFER_TYPE *pFirstBuffer, const __GMM_BUFFER_TYPE *pSecondBuffer);
             virtual bool        CopyClientParams(GMM_RESCREATE_PARAMS &CreateParams);
             GMM_VIRTUAL bool                RedescribePlanes();
             GMM_VIRTUAL bool                ReAdjustPlaneProperties(bool IsAuxSurf);
             GMM_VIRTUAL const GMM_PLATFORM_INFO& GetPlatformInfo();
 
-            /* Inline functions */
-            /////////////////////////////////////////////////////////////////////////////////////
-            /// Checks where the restrictions are invalid or not
-            /// @param[in]  pRestriction Restrictions to check
-            /// @return     true if restriction is invalid. false otherwise.
-            /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE_VIRTUAL GMM_INLINE bool IsRestrictionInvalid(__GMM_BUFFER_TYPE *pRestriction)
-            {
-                return ((pRestriction->MinDepth == 0xffffffff) ? true : false);
-            }
-
-            /////////////////////////////////////////////////////////////////////////////////////
-            /// Returns restrictions for a linear buffer.
-            /// @param[out]     pBuff Restrictions are returned in this buffer
-            /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE_VIRTUAL GMM_INLINE void GetLinearRestrictions(__GMM_BUFFER_TYPE* pBuff)
-            {
-                *pBuff = GMM_OVERRIDE_PLATFORM_INFO(&Surf)->Linear;
-            }
-
-            /////////////////////////////////////////////////////////////////////////////////////
-            /// Returns restrictions for the primary buffer.
-            /// @param[out]     pBuff Restrictions are returned in this buffer
-            /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE_VIRTUAL GMM_INLINE void GetPrimaryRestrictions(__GMM_BUFFER_TYPE* pBuff)
-            {
-                *pBuff = GMM_OVERRIDE_PLATFORM_INFO(&Surf)->ASyncFlipSurface;
-            }
-
-        public:
+    public:
             /* Constructors */
             GmmResourceInfoCommon():
                 ClientType(),
@@ -203,6 +172,7 @@ namespace GmmLib
             GMM_VIRTUAL void                    GMM_STDCALL GetTiledResourceMipPacking(uint32_t *pNumPackedMips,
                                                                            uint32_t *pNumTilesForPackedMips);
             GMM_VIRTUAL uint32_t                GMM_STDCALL GetPackedMipTailStartLod();
+            GMM_VIRTUAL bool                    GMM_STDCALL IsMipRCCAligned(uint8_t &MisAlignedLod);
             GMM_VIRTUAL uint8_t                 GMM_STDCALL GetDisplayFastClearSupport();
             GMM_VIRTUAL uint8_t                 GMM_STDCALL GetDisplayCompressionSupport();
             GMM_VIRTUAL uint32_t                GMM_STDCALL GetCompressionBlockWidth();
@@ -932,6 +902,40 @@ namespace GmmLib
             };
 
             /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns size of the surface depending on the surface parameters.
+            /// @return     Size of surface
+            ///
+            /// Below legacy API to query surface size are deprecated and will be removed in
+            /// later gmm releases. Client must move to unified GetSize() api.
+            ///  - GmmResGetSizeSurface()/ pResInfo->GetSizeSurface()
+            ///  - GmmResGetSizeMainSurface()/  pResInfo->GetSizeAllocation()
+            ///  - GmmResGetSizeAllocation()/ pResInfo->GetSizeMainSurface()
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T  GMM_STDCALL GetSize(GMM_SIZE_PARAM GmmSizeParam)
+            {
+                GMM_GFX_SIZE_T Size = 0;
+                switch (GmmSizeParam)
+                {
+                    case GMM_MAIN_SURF:
+                        Size =  Surf.Size;
+                        break;
+                    case GMM_MAIN_PLUS_AUX_SURF:
+                        Size =  Surf.Size + AuxSurf.Size + AuxSecSurf.Size;
+                        break;
+                    case GMM_TOTAL_SURF:
+                        Size = Surf.Size + AuxSurf.Size + AuxSecSurf.Size;
+                        if (Is64KBPageSuitable())
+                        {
+                            Size = GFX_ALIGN(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64));
+                        }
+                        break;
+                    default:
+                        __GMM_ASSERT(0);
+                }
+                return Size;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
             /// Returns size of the main surface only. Aux surface size not included.
             /// @return     Size of main surface
             /////////////////////////////////////////////////////////////////////////////////////
@@ -958,10 +962,9 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T  GMM_STDCALL GetSizeAllocation()
             {
-                #define ALIGN_SIZE(x, a)  (((x) + ((a) - 1)) - (((x) + ((a) - 1)) & ((a) - 1)))
                 if (Is64KBPageSuitable())
-                {
-                    return(ALIGN_SIZE(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64)));
+                { 
+                    return(GFX_ALIGN(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64)));
                 }
                 else
                 {
@@ -1285,7 +1288,7 @@ namespace GmmLib
                 {
                     if (GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags()))
                     {
-                        HAlign = 0;
+                        HAlign = 1; //Ignored, but we'll retrun valid encoding nonetheless.
                     }
                     else
                     {
@@ -1294,7 +1297,7 @@ namespace GmmLib
                             case 4:  HAlign = 1; break;
                             case 8:  HAlign = 2; break;
                             case 16: HAlign = 3; break;
-                            default: HAlign = 0; __GMM_ASSERT(0);
+                            default: HAlign = 1;
                         }
                     }
                 }
@@ -1326,7 +1329,7 @@ namespace GmmLib
                 {
                     if (GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags()))
                     {
-                        VAlign = 0;
+                        VAlign = 1; // Ignored , but we'll return valid encoding nonetheless.
                     }
                     else
                     {
@@ -1335,7 +1338,7 @@ namespace GmmLib
                             case 4:  VAlign = 1; break;
                             case 8:  VAlign = 2; break;
                             case 16: VAlign = 3; break;
-                            default: VAlign = 0; __GMM_ASSERT(0);
+                            default: VAlign = 1;
                         }
                     }
                 }
