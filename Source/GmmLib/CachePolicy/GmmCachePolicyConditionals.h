@@ -22,6 +22,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 #define PRODUCT(X)  (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) == IGFX_##X)
 
+#define FROMPRODUCT(X)  (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) >= IGFX_##X)
+
 #define SKU(FtrXxx) (pGmmGlobalContext->GetSkuTable().FtrXxx != 0)
 
 #define WA(WaXxx)   (pGmmGlobalContext->GetWaTable().WaXxx != 0)
