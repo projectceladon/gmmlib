@@ -35,6 +35,7 @@ namespace GmmLib
             /* Constructors */
             GmmGen11CachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy) :GmmGen10CachePolicy(pCachePolicy)
             {
+                CurrentMaxSpecialMocsIndex = 0;
             }
             virtual ~GmmGen11CachePolicy()
             {
