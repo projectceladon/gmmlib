@@ -28,6 +28,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/CachePolicy/GmmCachePolicyCommon.cpp \
     Source/GmmLib/CachePolicy/GmmGen10CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen11CachePolicy.cpp \
+    Source/GmmLib/CachePolicy/GmmGen12CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen8CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen9CachePolicy.cpp \
     Source/GmmLib/GlobalInfo/GmmClientContext.cpp \
@@ -36,6 +37,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/GlobalInfo/GmmOldApi.cpp \
     Source/GmmLib/Platform/GmmGen10Platform.cpp \
     Source/GmmLib/Platform/GmmGen11Platform.cpp \
+    Source/GmmLib/Platform/GmmGen12Platform.cpp \
     Source/GmmLib/Platform/GmmGen8Platform.cpp \
     Source/GmmLib/Platform/GmmGen9Platform.cpp \
     Source/GmmLib/Platform/GmmPlatform.cpp \
@@ -43,8 +45,10 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/Resource/GmmResourceInfoCommon.cpp \
     Source/GmmLib/Resource/GmmResourceInfoCommonEx.cpp \
     Source/GmmLib/Resource/GmmRestrictions.cpp \
+    Source/GmmLib/Resource/Linux/GmmResourceInfoLinCWrapper.cpp \
     Source/GmmLib/Texture/GmmGen10Texture.cpp \
     Source/GmmLib/Texture/GmmGen11Texture.cpp \
+    Source/GmmLib/Texture/GmmGen12Texture.cpp \
     Source/GmmLib/Texture/GmmGen7Texture.cpp \
     Source/GmmLib/Texture/GmmGen8Texture.cpp \
     Source/GmmLib/Texture/GmmGen9Texture.cpp \
@@ -52,6 +56,9 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/Texture/GmmTextureAlloc.cpp \
     Source/GmmLib/Texture/GmmTextureOffset.cpp \
     Source/GmmLib/Texture/GmmTextureSpecialCases.cpp \
+    Source/GmmLib/TranslationTable/GmmAuxTable.cpp \
+    Source/GmmLib/TranslationTable/GmmPageTableMgr.cpp \
+    Source/GmmLib/TranslationTable/GmmUmdTranslationTable.cpp \
     Source/GmmLib/Utility/CpuSwizzleBlt/CpuSwizzleBlt.c \
     Source/GmmLib/Utility/GmmLibObject.cpp \
     Source/GmmLib/Utility/GmmLog/GmmLog.cpp \
@@ -60,6 +67,8 @@ LOCAL_SRC_FILES = \
 
 LOCAL_CFLAGS = \
     -DGMM_DYNAMIC_MOCS_TABLE=true \
+    -Wno-unused-parameter \
+    -Wno-error \
     -DGMM_LIB_DLL \
     -DGMM_LIB_DLL_EXPORTS \
     -DGMM_UNIFIED_LIB \
@@ -74,10 +83,10 @@ LOCAL_CFLAGS = \
     -D__STDC_CONSTANT_MACROS \
     -D__STDC_LIMIT_MACROS \
     -D__UMD \
-    -Wno-error \
     -Digfx_gmmumd_dll_EXPORTS
 
 LOCAL_CPPFLAGS = \
+    -fexceptions \
     -std=c++11
 
 LOCAL_C_INCLUDES = \
@@ -101,4 +110,4 @@ LOCAL_EXPORT_C_INCLUDE_DIRS = \
     $(LOCAL_PATH)/Source/inc \
     $(LOCAL_PATH)/Source/inc/common \
 
-include $(BUILD_SHARED_LIBRARY)
+include $(BUILD_STATIC_LIBRARY)
