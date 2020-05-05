@@ -47,6 +47,17 @@ typedef struct _GmmClientAllocationCallbacks_
     PFN_ClientFreeFunction                  pfnFree;
 } GmmClientAllocationCallbacks;
 
+//===========================================================================
+// typedef:
+//      GMM_DEVICE_OPERATION
+//
+// Description:
+//     Decribes compoents required for device operations.
+//---------------------------------------------- ------------------------------
+typedef struct _GMM_DEVICE_INFO_REC
+{
+    GMM_DEVICE_CALLBACKS_INT     *pDeviceCb;
+}GMM_DEVICE_INFO;
 
 #ifdef __cplusplus
 #include "GmmMemAllocator.hpp"
@@ -71,7 +82,9 @@ namespace GmmLib
         ///< Placeholders for storing UMD context. Actual UMD context that needs to be stored here is TBD
         void                             *pUmdAdapter;
         GMM_UMD_CONTEXT                  *pGmmUmdContext;
-
+        GMM_DEVICE_CALLBACKS_INT          DeviceCB;       //OS-specific defn: Will be used by Clients to send as input arguments.
+        // Flag to indicate Device_callbacks received.
+        uint8_t             IsDeviceCbReceived;
     public:
         /* Constructor */
         GmmClientContext(GMM_CLIENT ClientType);
@@ -112,6 +125,9 @@ namespace GmmLib
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsCompressed(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL uint8_t                             GMM_STDCALL IsYUVPacked(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL GMM_SURFACESTATE_FORMAT             GMM_STDCALL GetSurfaceStateFormat(GMM_RESOURCE_FORMAT Format);
+        GMM_VIRTUAL uint8_t                             GMM_STDCALL GetSurfaceStateCompressionFormat(GMM_RESOURCE_FORMAT Format);
+        GMM_VIRTUAL uint8_t                             GMM_STDCALL GetMediaSurfaceStateCompressionFormat(GMM_RESOURCE_FORMAT Format);
+        GMM_VIRTUAL GMM_E2ECOMP_FORMAT                  GMM_STDCALL GetLosslessCompressionType(GMM_RESOURCE_FORMAT Format);
         GMM_VIRTUAL uint64_t                            GMM_STDCALL GetInternalGpuVaRangeLimit();
 
         /* ResourceInfo Creation and Destroy API's */
@@ -119,7 +135,13 @@ namespace GmmLib
         GMM_VIRTUAL GMM_RESOURCE_INFO* GMM_STDCALL       CopyResInfoObject(GMM_RESOURCE_INFO *pSrcRes);
         GMM_VIRTUAL void GMM_STDCALL                     ResMemcpy(void *pDst, void *pSrc);
         GMM_VIRTUAL void  GMM_STDCALL                    DestroyResInfoObject(GMM_RESOURCE_INFO    *pResInfo);
+        /* PageTableMgr Creation and Destroy API's */
+        GMM_VIRTUAL GMM_PAGETABLE_MGR* GMM_STDCALL      CreatePageTblMgrObject(GMM_DEVICE_CALLBACKS_INT* pDevCb, uint32_t TTFlags);
+        GMM_VIRTUAL GMM_PAGETABLE_MGR* GMM_STDCALL      CreatePageTblMgrObject(uint32_t TTFlags);
+        /* PageTableMgr Creation and Destroy API's */
+        GMM_VIRTUAL void GMM_STDCALL                    DestroyPageTblMgrObject(GMM_PAGETABLE_MGR* pPageTableMgr);
 
+        
 #ifdef GMM_LIB_DLL
         /* ResourceInfo and PageTableMgr Create and Destroy APIs with Client provided Memory Allocators */
         GMM_VIRTUAL GMM_RESOURCE_INFO* GMM_STDCALL       CreateResInfoObject(GMM_RESCREATE_PARAMS *pCreateParams,
@@ -127,6 +149,17 @@ namespace GmmLib
         GMM_VIRTUAL void  GMM_STDCALL                    DestroyResInfoObject(GMM_RESOURCE_INFO    *pResInfo,
                                                                               GmmClientAllocationCallbacks *pAllocCbs);
 #endif
+
+        GMM_VIRTUAL GMM_PAGETABLE_MGR* GMM_STDCALL      CreatePageTblMgrObject(
+                                                        GMM_DEVICE_CALLBACKS_INT* pDevCb,
+                                                        uint32_t TTFlags,
+                                                        GmmClientAllocationCallbacks* pAllocCbs);
+        GMM_VIRTUAL GMM_PAGETABLE_MGR* GMM_STDCALL      CreatePageTblMgrObject(
+                                                        uint32_t TTFlags,
+                                                        GmmClientAllocationCallbacks* pAllocCbs);
+        GMM_VIRTUAL void GMM_STDCALL                    DestroyPageTblMgrObject(GMM_PAGETABLE_MGR* pPageTableMgr,
+                                                        GmmClientAllocationCallbacks* pAllocCbs);
+        GMM_VIRTUAL GMM_STATUS GMM_STDCALL              GmmSetDeviceInfo(GMM_DEVICE_INFO* DeviceInfo);
     };
 }
 

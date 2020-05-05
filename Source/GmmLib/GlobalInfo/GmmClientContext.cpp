@@ -27,6 +27,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include "..\..\inc\common\gfxEscape.h"
 #include "..\..\..\miniport\LHDM\inc\gmmEscape.h"
 #include "Internal\Windows\GmmResourceInfoWinInt.h"
+#include "../TranslationTable/GmmUmdTranslationTable.h"
 #endif
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -36,7 +37,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 GmmLib::GmmClientContext::GmmClientContext(GMM_CLIENT ClientType)
     : ClientType(),
       pUmdAdapter(),
-      pGmmUmdContext()
+      pGmmUmdContext(),
+      DeviceCB(),
+      IsDeviceCbReceived(0)
 {
     this->ClientType = ClientType;
 }
@@ -284,6 +287,45 @@ GMM_SURFACESTATE_FORMAT GMM_STDCALL GmmLib::GmmClientContext::GetSurfaceStateFor
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for returning
+/// RENDER_SURFACE_STATE::CompressionFormat
+///
+/// @return     uint8_t
+/////////////////////////////////////////////////////////////////////////////////////
+uint8_t GMM_STDCALL GmmLib::GmmClientContext::GetSurfaceStateCompressionFormat(GMM_RESOURCE_FORMAT Format)
+{
+    __GMM_ASSERT((Format > GMM_FORMAT_INVALID) && (Format < GMM_RESOURCE_FORMATS));
+
+    return pGmmGlobalContext->GetPlatformInfo().FormatTable[Format].CompressionFormat.AuxL1eFormat;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for returning
+/// MEDIA_SURFACE_STATE::CompressionFormat
+///
+/// @return     uint8_t
+/////////////////////////////////////////////////////////////////////////////////////
+uint8_t GMM_STDCALL GmmLib::GmmClientContext::GetMediaSurfaceStateCompressionFormat(GMM_RESOURCE_FORMAT Format)
+{
+    __GMM_ASSERT((Format > GMM_FORMAT_INVALID) && (Format < GMM_RESOURCE_FORMATS));
+
+    return pGmmGlobalContext->GetPlatformInfoObj()->OverrideCompressionFormat(Format, (uint8_t)0x1);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for returning E2E compression format
+///
+/// @return     GMM_E2ECOMP_FORMAT
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_E2ECOMP_FORMAT GMM_STDCALL GmmLib::GmmClientContext::GetLosslessCompressionType(GMM_RESOURCE_FORMAT Format)
+{
+    // ToDo: Remove the definition of GmmGetLosslessCompressionType(Format)
+    __GMM_ASSERT((Format > GMM_FORMAT_INVALID) && (Format < GMM_RESOURCE_FORMATS));
+
+    return pGmmGlobalContext->GetPlatformInfo().FormatTable[Format].CompressionFormat.AuxL1eFormat;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
 /// Member function of ClientContext class to return InternalGpuVaMax value
 /// stored in pGmmGlobalContext
 ///
@@ -426,6 +468,57 @@ void GMM_STDCALL GmmLib::GmmClientContext::DestroyResInfoObject(GMM_RESOURCE_INF
     }
 }
 
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for creation of PAgeTableMgr Object .
+/// @see        GmmLib::GMM_PAGETABLE_MGR::GMM_PAGETABLE_MGR
+///
+/// @param[in] TTFags
+/// @return     Pointer to GMM_PAGETABLE_MGR class.
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_PAGETABLE_MGR* GMM_STDCALL GmmLib::GmmClientContext::CreatePageTblMgrObject(uint32_t TTFlags)
+{
+    if (!IsDeviceCbReceived)
+    {
+        GMM_ASSERTDPF(0, "Device_callbacks not set");
+        return NULL;
+    }
+
+    return CreatePageTblMgrObject(&DeviceCB, TTFlags);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for creation of PAgeTableMgr Object .
+/// @see        GmmLib::GMM_PAGETABLE_MGR::GMM_PAGETABLE_MGR
+///
+/// @param[in] pDevCb: Pointer to GMM_DEVICE_CALLBACKS_INT
+/// @param[in] TTFags
+/// @return     Pointer to GMM_PAGETABLE_MGR class.
+//TBD: move the code to new overloaded the API and remove this API once all clients are moved to new API.
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_PAGETABLE_MGR* GMM_STDCALL GmmLib::GmmClientContext::CreatePageTblMgrObject(GMM_DEVICE_CALLBACKS_INT* pDevCb,
+                                                                                uint32_t TTFlags)
+{
+    GMM_PAGETABLE_MGR* pPageTableMgr = NULL;
+
+    pPageTableMgr = new GMM_PAGETABLE_MGR(pDevCb, TTFlags, this);
+
+    return pPageTableMgr;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for destroy of PageTableMgr Object .
+///
+/// @param[in] pPageTableMgr: Pointer to GMM_PAGETABLE_MGR
+/// @return     void.
+/////////////////////////////////////////////////////////////////////////////////////
+void GMM_STDCALL GmmLib::GmmClientContext::DestroyPageTblMgrObject(GMM_PAGETABLE_MGR* pPageTableMgr)
+{
+    if (pPageTableMgr)
+    {
+        delete pPageTableMgr;
+    }
+}
+
 #ifdef GMM_LIB_DLL
 /////////////////////////////////////////////////////////////////////////////////////
 /// Member function of ClientContext class for creation of ResourceInfo Object .
@@ -529,6 +622,90 @@ void GMM_STDCALL GmmLib::GmmClientContext::DestroyResInfoObject(GMM_RESOURCE_INF
     }
 }
 #endif
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for creation of PAgeTableMgr Object .
+/// @see        GmmLib::GMM_PAGETABLE_MGR::GMM_PAGETABLE_MGR
+///
+/// @param[in] TTFags
+/// @return     Pointer to GMM_PAGETABLE_MGR class.
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_PAGETABLE_MGR* GMM_STDCALL GmmLib::GmmClientContext::CreatePageTblMgrObject(uint32_t TTFlags,
+                                                         GmmClientAllocationCallbacks* pAllocCbs)
+{
+    if (!IsDeviceCbReceived)
+    {
+        GMM_ASSERTDPF(0, "Device_callbacks not set");
+        return NULL;
+    }
+    return CreatePageTblMgrObject(
+        &DeviceCB,
+        TTFlags,
+        pAllocCbs);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for creation of PAgeTableMgr Object .
+/// @see        GmmLib::GMM_PAGETABLE_MGR::GMM_PAGETABLE_MGR
+///
+/// @param[in] pDevCb: Pointer to GMM_DEVICE_CALLBACKS_INT
+/// @param[in] TTFags
+/// @return     Pointer to GMM_PAGETABLE_MGR class.
+/// TBD: move the code to new overloaded the API and remove this API once all clients are moved to new API.
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_PAGETABLE_MGR* GMM_STDCALL GmmLib::GmmClientContext::CreatePageTblMgrObject(
+                                                         GMM_DEVICE_CALLBACKS_INT* pDevCb,
+                                                         uint32_t                      TTFlags,
+                                                         GmmClientAllocationCallbacks* pAllocCbs)
+{
+    if (!pAllocCbs || !pAllocCbs->pfnAllocation)
+    {
+        return CreatePageTblMgrObject(
+            pDevCb,
+            TTFlags);
+    }
+    else
+    {
+        GMM_PAGETABLE_MGR* pPageTableMgr = NULL;
+        return pPageTableMgr;
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for destroy of PageTableMgr Object .
+///
+/// @param[in] pPageTableMgr: Pointer to GMM_PAGETABLE_MGR
+/// @return     void.
+/////////////////////////////////////////////////////////////////////////////////////
+void GMM_STDCALL GmmLib::GmmClientContext::DestroyPageTblMgrObject(GMM_PAGETABLE_MGR* pPageTableMgr,
+    GmmClientAllocationCallbacks* pAllocCbs)
+{
+    if (!pAllocCbs || !pAllocCbs->pfnFree)
+    {
+        return DestroyPageTblMgrObject(pPageTableMgr);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+/// Member function of ClientContext class for doing device specific operations.
+/// Clients must call it before any Gfx resource (incl. svm)
+/// is mapped, must happen before any use of GfxPartition, or PageTableMgr init.
+/// @param[in]  DeviceInfo : Pointer to info related to Device Operations.
+/// @return     GMM_STATUS.
+//////////////////////////////////////////////////////////////////////////////////////////
+GMM_STATUS GMM_STDCALL GmmLib::GmmClientContext::GmmSetDeviceInfo(GMM_DEVICE_INFO* DeviceInfo)
+{
+    GMM_STATUS Status = GMM_SUCCESS;
+
+    if (DeviceInfo == NULL || DeviceInfo->pDeviceCb == NULL)
+    {
+        return GMM_INVALIDPARAM;
+    }
+
+    DeviceCB = *(DeviceInfo->pDeviceCb);
+    IsDeviceCbReceived = 1;
+    return Status;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////
 /// Gmm lib DLL exported C wrapper for creating GmmLib::GmmClientContext object

@@ -106,17 +106,36 @@ extern "C" GMM_LIB_API GMM_CLIENT_CONTEXT *GMM_STDCALL GmmInit(const PLATFORM Pl
     GMM_STATUS          Status         = GMM_SUCCESS;
     GMM_CLIENT_CONTEXT *pClientContext = NULL;
 
-
     Status = GmmCreateSingletonContext(Platform, pSkuTable, pWaTable, pGtSysInfo);
 
     if(Status == GMM_SUCCESS)
-    {
+     {
         pClientContext = GmmCreateClientContext(ClientType);
-    }
+     }
 
     return pClientContext;
 }
+/////////////////////////////////////////////////////////////////////////////////////
+// First Call to GMM Lib DLL/so to initialize singleton global context
+// and create client context
+/////////////////////////////////////////////////////////////////////////////////////
+extern "C" GMM_LIB_API GMM_STATUS GMM_STDCALL InitializeGmm(GMM_INIT_IN_ARGS *pInArgs, GMM_INIT_OUT_ARGS *pOutArgs)
+{
+    GMM_STATUS Status = GMM_ERROR;
 
+    if(pInArgs && pOutArgs)
+    {
+
+        Status = GmmCreateSingletonContext(pInArgs->Platform, pInArgs->pSkuTable, pInArgs->pWaTable, pInArgs->pGtSysInfo);
+
+        if(Status == GMM_SUCCESS)
+        {
+            pOutArgs->pGmmClientContext = GmmCreateClientContext(pInArgs->ClientType);
+        }
+    }
+
+    return Status;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////
 /// Destroys singleton global context and client context
@@ -126,5 +145,17 @@ extern "C" GMM_LIB_API void GMM_STDCALL GmmDestroy(GMM_CLIENT_CONTEXT *pGmmClien
 {
     GmmDestroySingletonContext();
     GmmDeleteClientContext(pGmmClientContext);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+// Destroys singleton global context and client context
+/////////////////////////////////////////////////////////////////////////////////////
+extern "C" GMM_LIB_API void GMM_STDCALL GmmAdapterDestroy(GMM_INIT_OUT_ARGS *pInArgs)
+{
+    if(pInArgs && pInArgs->pGmmClientContext)
+    {
+        GmmDeleteClientContext(pInArgs->pGmmClientContext);
+        GmmDestroySingletonContext();
+    }
 }
 #endif // GMM_LIB_DLL
