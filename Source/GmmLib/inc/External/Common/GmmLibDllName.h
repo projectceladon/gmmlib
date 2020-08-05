@@ -31,7 +31,7 @@ OTHER DEALINGS IN THE SOFTWARE.
     #if defined(_WIN64)
         #define GMM_UMD_DLL           "igdgmm64.dll"
     #elif defined(ANDROID)
-        #define GMM_UMD_DLL           "libigdgmm.so"
+        #define GMM_UMD_DLL           "libgmm_umd.so"
     #else
         #define GMM_UMD_DLL           "libigdgmm.so.11"
     #endif
@@ -45,7 +45,7 @@ OTHER DEALINGS IN THE SOFTWARE.
     #if defined(_WIN32)
         #define GMM_UMD_DLL     "igdgmm32.dll"
     #elif defined(ANDROID)
-        #define GMM_UMD_DLL     "libigdgmm.so"
+        #define GMM_UMD_DLL     "libgmm_umd.so"
     #else
         #define GMM_UMD_DLL     "libigdgmm.so.11"
     #endif

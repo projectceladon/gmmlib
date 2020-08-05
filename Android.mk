@@ -110,4 +110,4 @@ LOCAL_EXPORT_C_INCLUDE_DIRS = \
     $(LOCAL_PATH)/Source/inc \
     $(LOCAL_PATH)/Source/inc/common \
 
-include $(BUILD_STATIC_LIBRARY)
+include $(BUILD_SHARED_LIBRARY)
