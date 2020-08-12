@@ -1066,8 +1066,6 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
         // VVVV
         // VVVV
         // VVVV
-        case GMM_FORMAT_BGRP:
-        case GMM_FORMAT_RGBP:
         case GMM_FORMAT_MFX_JPEG_YUV444: // Similar to IMC3 but U/V are full size.
 #if _WIN32
         case GMM_FORMAT_WGBOX_YUV444:
@@ -1095,6 +1093,30 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
 
                 break;
             }
+        case GMM_FORMAT_BGRP:
+        case GMM_FORMAT_RGBP:
+        {
+            //For RGBP linear Tile keep resource Offset non aligned and for other Tile format to be 16-bit aligned
+            if(pTexInfo->Flags.Info.Linear)
+            {
+                VHeight = YHeight;
+
+                Height = YHeight + 2 * VHeight;
+
+                pTexInfo->OffsetInfo.Plane.NoOfPlanes = 3;
+            }
+            else
+            {
+                YHeight = GFX_ALIGN(YHeight, GMM_IMCx_PLANE_ROW_ALIGNMENT);
+                VHeight = YHeight;
+
+                Height = YHeight + 2 * VHeight;
+
+                pTexInfo->OffsetInfo.Plane.NoOfPlanes = 3;
+            }
+
+            break;
+        }
         case GMM_FORMAT_IMC2: // IMC2 = IMC4 with Swapped U/V
         case GMM_FORMAT_IMC4:
         {
@@ -1132,6 +1154,7 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
         case GMM_FORMAT_P012:
         case GMM_FORMAT_P016:
         case GMM_FORMAT_P208:
+        case GMM_FORMAT_P216:
         {
             // YYYYYYYY
             // YYYYYYYY
@@ -1159,7 +1182,8 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
                (pTexInfo->Format == GMM_FORMAT_P010) ||
                (pTexInfo->Format == GMM_FORMAT_P012) ||
                (pTexInfo->Format == GMM_FORMAT_P016) ||
-               (pTexInfo->Format == GMM_FORMAT_P208))
+               (pTexInfo->Format == GMM_FORMAT_P208) ||
+               (pTexInfo->Format == GMM_FORMAT_P216))
             {
                 WidthBytesPhysical = GFX_ALIGN(WidthBytesPhysical, 2); // If odd YWidth, pitch bumps-up to fit rounded-up U/V planes.
             }

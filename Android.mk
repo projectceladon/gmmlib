@@ -29,6 +29,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/CachePolicy/GmmGen10CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen11CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen12CachePolicy.cpp \
+    Source/GmmLib/CachePolicy/GmmGen12dGPUCachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen8CachePolicy.cpp \
     Source/GmmLib/CachePolicy/GmmGen9CachePolicy.cpp \
     Source/GmmLib/GlobalInfo/GmmClientContext.cpp \

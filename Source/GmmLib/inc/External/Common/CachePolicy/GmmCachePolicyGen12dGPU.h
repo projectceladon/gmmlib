@@ -1,5 +1,5 @@
 /*==============================================================================
-Copyright(c) 2017 Intel Corporation
+Copyright(c) 2020 Intel Corporation
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files(the "Software"),
@@ -19,21 +19,31 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ============================================================================*/
+#pragma once
 
-#define PRODUCT(X)  (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) == IGFX_##X)
+#ifdef __cplusplus
+#include "../GmmCachePolicyCommon.h"
 
-#define FROMPRODUCT(X)  (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) >= IGFX_##X)
+namespace GmmLib
+{
+    class NON_PAGED_SECTION GmmGen12dGPUCachePolicy :
+        public GmmGen12CachePolicy
+    {
+        public:
 
-#define SKU(FtrXxx) (pGmmGlobalContext->GetSkuTable().FtrXxx != 0)
+            /* Constructors */
+            GmmGen12dGPUCachePolicy(GMM_CACHE_POLICY_ELEMENT *pCachePolicy):GmmGen12CachePolicy(pCachePolicy)
+            {
+            }
+            virtual ~GmmGen12dGPUCachePolicy()
+            {
+            }
 
-#define WA(WaXxx)   (pGmmGlobalContext->GetWaTable().WaXxx != 0)
+            /* Function prototypes */
+            GMM_STATUS InitCachePolicy();
+            void       SetUpMOCSTable();
+            int32_t    IsSpecialMOCSUsage(GMM_RESOURCE_USAGE_TYPE Usage, bool& UpdateMOCS);
 
-// Underscored to prevent name collision with the GMM_CACHE_POLICY_ELEMENT fields named L3 and LLC
-#define _L3           (pGmmGlobalContext->GetGtSysInfo()->L3CacheSizeInKb)
-#define _LLC          (pGmmGlobalContext->GetGtSysInfo()->LLCCacheSizeInKb)
-#define _ELLC         (pGmmGlobalContext->GetGtSysInfo()->EdramSizeInKb)
-#define CAM$          (SKU(FtrCameraCaptureCaching))
-
-// Units are already in KB in the system information, so these helper macros need to account for that
-#define KB(N)         (N)
-#define MB(N)         (1024 * KB(N))
+    };
+}
+#endif // #ifdef __cplusplus

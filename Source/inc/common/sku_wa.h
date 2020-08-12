@@ -97,6 +97,8 @@ typedef struct _SKU_FEATURE_TABLE
         unsigned int   FtrFrameBufferLLC                : 1;  // Displayable Frame buffers cached in LLC
         unsigned int   FtrDriverFLR                     : 1;  // Enable Function Level Reset (Gen11+)
         unsigned int   FtrLocalMemory                   : 1;
+        unsigned int   FtrCameraCaptureCaching          : 1;
+        unsigned int   FtrLocalMemoryAllows4KB          : 1;
    };
 
 

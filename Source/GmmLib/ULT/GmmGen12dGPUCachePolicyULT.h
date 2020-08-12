@@ -1,5 +1,5 @@
 /*==============================================================================
-Copyright(c) 2017 Intel Corporation
+Copyright(c) 2020 Intel Corporation
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files(the "Software"),
@@ -20,20 +20,26 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ============================================================================*/
 
-#define PRODUCT(X)  (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) == IGFX_##X)
+#pragma once
 
-#define FROMPRODUCT(X)  (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) >= IGFX_##X)
+#include "GmmCachePolicyULT.h"
 
-#define SKU(FtrXxx) (pGmmGlobalContext->GetSkuTable().FtrXxx != 0)
+class CTestGen12dGPUCachePolicy : public CTestCachePolicy
+{
+protected:
+    virtual void SetUpGen12dGPUVariant(PRODUCT_FAMILY);
+    virtual void TearDownGen12dGPUVariant();
+    virtual void CheckL3Gen12dGPUCachePolicy();
+    virtual void CheckSpecialMocs(uint32_t                    Usage,
+                                  uint32_t                    AssignedMocsIdx,
+                                  GMM_CACHE_POLICY_ELEMENT ClientRequest);
 
-#define WA(WaXxx)   (pGmmGlobalContext->GetWaTable().WaXxx != 0)
+    virtual void CheckMocsIdxHDCL1(uint32_t                    Usage,
+                                   uint32_t                    AssignedMocsIdx,
+                                   GMM_CACHE_POLICY_ELEMENT ClientRequest);
 
-// Underscored to prevent name collision with the GMM_CACHE_POLICY_ELEMENT fields named L3 and LLC
-#define _L3           (pGmmGlobalContext->GetGtSysInfo()->L3CacheSizeInKb)
-#define _LLC          (pGmmGlobalContext->GetGtSysInfo()->LLCCacheSizeInKb)
-#define _ELLC         (pGmmGlobalContext->GetGtSysInfo()->EdramSizeInKb)
-#define CAM$          (SKU(FtrCameraCaptureCaching))
-
-// Units are already in KB in the system information, so these helper macros need to account for that
-#define KB(N)         (N)
-#define MB(N)         (1024 * KB(N))
+public:
+    static void SetUpTestCase();
+    static void TearDownTestCase();
+};
+#pragma once
