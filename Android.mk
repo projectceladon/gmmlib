@@ -66,7 +66,7 @@ LOCAL_SRC_FILES = \
     Source/GmmLib/Utility/GmmUtility.cpp \
     Source/Common/AssertTracer/AssertTracer.cpp \
 
-LOCAL_CFLAGS = \
+LOCAL_CFLAGS := \
     -Wno-error \
     -Wno-unused-parameter \
     -DGMM_LIB_DLL \
@@ -85,13 +85,12 @@ LOCAL_CFLAGS = \
     -D__UMD \
     -Digfx_gmmumd_dll_EXPORTS
 
-LOCAL_CPPFLAGS = \
+LOCAL_CPPFLAGS := \
     -fexceptions \
     -std=c++11
 
 LOCAL_C_INCLUDES = \
     $(LOCAL_PATH)/Source/GmmLib \
-    $(LOCAL_PATH)/Source/OpenGL/source/os/linux/oskl \
     $(LOCAL_PATH)/Source/GmmLib/Utility/GmmLog \
     $(LOCAL_PATH)/Source/GmmLib/inc \
     $(LOCAL_PATH)/Source/GmmLib/Utility \
