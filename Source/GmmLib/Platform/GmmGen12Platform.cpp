@@ -314,6 +314,7 @@ FCRECTALIGN(TILE__64_2D_128bpe, 128,  32,  32,   32, 32);
     else if(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_S ||
        (GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_P) || 
        (GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_N) ||
+       (GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_RAPTORLAKE_S) ||
        (GFX_GET_CURRENT_PRODUCT(Data.Platform) >= IGFX_XE_HP_SDV))
     {
         Data.NoOfBitsSupported                = 46;
