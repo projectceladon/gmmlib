@@ -83,11 +83,19 @@ LOCAL_CFLAGS := \
     -D__STDC_CONSTANT_MACROS \
     -D__STDC_LIMIT_MACROS \
     -D__UMD \
-    -Digfx_gmmumd_dll_EXPORTS
+    -Digfx_gmmumd_dll_EXPORTS \
+    -msse \
+    -msse2 \
+    -msse3 \
+    -mssse3 \
+    -msse4 \
+    -msse4.1 \
+    -msse4.2 \
 
 LOCAL_CPPFLAGS := \
     -fexceptions \
-    -std=c++11
+    -std=c++11 \
+    -Wno-pragma-pack-suspicious-include
 
 LOCAL_C_INCLUDES = \
     $(LOCAL_PATH)/Source/GmmLib \
