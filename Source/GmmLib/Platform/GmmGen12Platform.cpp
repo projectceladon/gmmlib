@@ -309,6 +309,7 @@ FCRECTALIGN(TILE__64_2D_128bpe, 128,  32,  32,   32, 32);
     Data.HighestAcceptablePhysicalAddress = GFX_MASK_LARGE(0, 38);
     if(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_S ||
 	(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_P) ||
+	(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_N) ||
 	(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_RAPTORLAKE_S) ||
 	(GFX_GET_CURRENT_PRODUCT(Data.Platform) >= IGFX_XE_HP_SDV))
     {
