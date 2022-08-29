@@ -1304,6 +1304,14 @@ typedef enum __NATIVEGTTYPE
 #define DEV_ID_A782                             0xA782
 #define DEV_ID_A783                             0xA783
 
+// RPL-P
+#define DEV_ID_A7A0                             0xA7A0
+#define DEV_ID_A7A1                             0xA7A1
+#define DEV_ID_A7A8                             0xA7A8
+#define DEV_ID_A7A9                             0xA7A9
+#define DEV_ID_A720                             0xA720
+#define DEV_ID_A721                             0xA721
+
 //ICL PCH LP Device IDs
 #define ICP_LP_RESERVED_FUSE_ID                 0x3480
 #define ICP_LP_U_SUPER_SKU_ID                   0x3481
