@@ -35,6 +35,25 @@ OTHER DEALINGS IN THE SOFTWARE.
 #include "External/Common/GmmLibDll.h"
 
 /////////////////////////////////////////////////////////////////////////////////////
+/// First Call to GMM Lib DLL/so to get the DLL/so exported fucntion pointers
+///
+/////////////////////////////////////////////////////////////////////////////////////
+extern "C" GMM_LIB_API GMM_STATUS GMM_STDCALL OpenGmm(GmmExportEntries *pm_GmmFuncs)
+{
+    GMM_STATUS Status = GMM_SUCCESS;
+    if(pm_GmmFuncs)
+    {
+        //TODO
+    }
+    else
+    {
+        Status = GMM_INVALIDPARAM;
+    }
+
+    return Status;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
 // First Call to GMM Lib DLL/so to initialize singleton global context
 // and create client context
 /////////////////////////////////////////////////////////////////////////////////////
