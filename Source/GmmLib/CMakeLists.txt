@@ -24,11 +24,11 @@ cmake_minimum_required(VERSION 3.5)
 project(igfx_gmmumd)
 
 # GmmLib Api Version used for so naming
-set(GMMLIB_API_MAJOR_VERSION 11)
+set(GMMLIB_API_MAJOR_VERSION 12)
 set(GMMLIB_API_MINOR_VERSION 3)
 
 if(NOT DEFINED MAJOR_VERSION)
-	set(MAJOR_VERSION 11)
+	set(MAJOR_VERSION 12)
 endif()
 
 if(NOT DEFINED MINOR_VERSION)
@@ -42,6 +42,26 @@ endif()
 if(NOT DEFINED GMMLIB_API_PATCH_VERSION)
     set(GMMLIB_API_PATCH_VERSION ${PATCH_VERSION})
 endif()
+
+# The Gmmlib dll is generated as libigdgmm.so.<x>.<y>.<z> where,
+# <x> = GMMLIB_API_MAJOR_VERSION
+# <y> = GMMLIB_API_MINOR_VERSION
+# <z> = GMMLIB_API_PATCH_VERSION
+#
+# Example: libigdgmm.so.12.0.0
+# 12 = GMMLIB_API_MAJOR_VERSION
+# 0  = GMMLIB_API_MINOR_VERSION
+# 0  = GMMLIB_API_PATCH_VERSION
+#
+# Library version update
+# - increment major for any ABI change
+# - increment minor for any interface change (e.g. new/modified function)
+#
+# Example:
+# On potential ABI break changes
+#
+# libigdgmm.so.<GMMLIB_API_MAJOR_VERSION>.y.z becomes libigdgmm.so.<GMMLIB_API_MAJOR_VERSION + 1>.0.0
+# i.e libigdgmm.so.12.5.0 becomes libigdgmm.so.13.0.0
 
 message(STATUS "API version: ${GMMLIB_API_MAJOR_VERSION}.${GMMLIB_API_MINOR_VERSION}.${GMMLIB_API_PATCH_VERSION}")
 message(STATUS "Package version: ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}")
@@ -124,6 +144,19 @@ if(CMAKE_CONFIGURATION_TYPES)
   set( CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING
        "Reset the configurations to what we need"
        FORCE)
+else()
+  if("${BUILD_TYPE}" STREQUAL "release")
+     set(CMAKE_BUILD_TYPE "Release")
+  elseif("${BUILD_TYPE}" STREQUAL "release-internal")
+    set(CMAKE_BUILD_TYPE "ReleaseInternal")
+  elseif("${BUILD_TYPE}" STREQUAL "debug")
+    set(CMAKE_BUILD_TYPE "Debug")
+  elseif("${BUILD_TYPE}" STREQUAL "RelWithDebInfo")
+    set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+  elseif("${BUILD_TYPE}" STREQUAL "MinSizeRel")
+    set(CMAKE_BUILD_TYPE "MinSizeRel")
+  endif()
+
 endif()
 
 set(GMMLIB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -133,15 +166,9 @@ else()
     set (GMMLIB_ARCH "32")
 endif()
 
-if ("${BUILD_TYPE}" STREQUAL "release")
-    set(CMAKE_BUILD_TYPE "Release")
-elseif ("${BUILD_TYPE}" STREQUAL "release-internal")
-    set(CMAKE_BUILD_TYPE "ReleaseInternal")
-elseif ("${BUILD_TYPE}" STREQUAL "debug")
-    set(CMAKE_BUILD_TYPE "Debug")
-endif()
-
-if("${GMMLIB_MARCH}" STREQUAL "")
+if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^aarch")
+    set(GMMLIB_MARCH "armv8-a+fp+simd")
+elseif("${GMMLIB_MARCH}" STREQUAL "")
     set(GMMLIB_MARCH "corei7")
 endif()
 
@@ -177,13 +204,15 @@ set(HEADERS_
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen10CachePolicy.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen11CachePolicy.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen12CachePolicy.h
-        ${BS_DIR_GMMLIB}/CachePolicy/GmmGen12dGPUCachePolicy.h
+        ${BS_DIR_GMMLIB}/CachePolicy/GmmXe_LPGCachePolicy.h
+	${BS_DIR_GMMLIB}/CachePolicy/GmmGen12dGPUCachePolicy.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen8CachePolicy.h
 	${BS_DIR_GMMLIB}/CachePolicy/GmmGen9CachePolicy.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen10.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen11.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen12.h
-        ${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen12dGPU.h
+	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyXe_LPG.h
+	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen12dGPU.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen8.h
 	${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen9.h
 	${BS_DIR_GMMLIB}/inc/External/Common/GmmCachePolicy.h
@@ -217,6 +246,7 @@ set(HEADERS_
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen10TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen11TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen12TextureCalc.h
+	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmXe_LPGTextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen7TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen8TextureCalc.h
 	${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen9TextureCalc.h
@@ -245,6 +275,7 @@ set(SOURCES_
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen10CachePolicy.cpp
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen11CachePolicy.cpp
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen12CachePolicy.cpp
+  ${BS_DIR_GMMLIB}/CachePolicy/GmmXe_LPGCachePolicy.cpp
   ${BS_DIR_GMMLIB}/CachePolicy/GmmGen12dGPUCachePolicy.cpp
   ${BS_DIR_GMMLIB}/Platform/GmmGen11Platform.cpp
   ${BS_DIR_GMMLIB}/Platform/GmmGen12Platform.cpp
@@ -263,13 +294,13 @@ set(SOURCES_
   ${BS_DIR_GMMLIB}/Texture/GmmGen10Texture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmGen11Texture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmGen12Texture.cpp
+  ${BS_DIR_GMMLIB}/Texture/GmmXe_LPGTexture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTexture.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTextureAlloc.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTextureSpecialCases.cpp
   ${BS_DIR_GMMLIB}/Texture/GmmTextureOffset.cpp
   ${BS_DIR_GMMLIB}/GlobalInfo/GmmInfo.cpp
   ${BS_DIR_GMMLIB}/Utility/CpuSwizzleBlt/CpuSwizzleBlt.c
-  ${BS_DIR_GMMLIB}/Utility/GmmLibObject.cpp
   ${BS_DIR_GMMLIB}/Utility/GmmLog/GmmLog.cpp
   ${BS_DIR_GMMLIB}/Utility/GmmUtility.cpp
 )
@@ -280,8 +311,7 @@ set(UMD_SOURCES
   ${BS_DIR_GMMLIB}/TranslationTable/GmmPageTableMgr.cpp
   ${BS_DIR_GMMLIB}/TranslationTable/GmmUmdTranslationTable.cpp
   ${BS_DIR_GMMLIB}/GlobalInfo/GmmClientContext.cpp
-  ${BS_DIR_GMMLIB}/GlobalInfo/GmmOldApi.cpp
-   ${BS_DIR_GMMLIB}/GlobalInfo/GmmLibDllMain.cpp
+  ${BS_DIR_GMMLIB}/GlobalInfo/GmmLibDllMain.cpp
   )
 
 source_group("Source Files\\Cache Policy\\Client Files" FILES
@@ -289,7 +319,8 @@ source_group("Source Files\\Cache Policy\\Client Files" FILES
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen10CachePolicy.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen11CachePolicy.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen12CachePolicy.h
-                        ${BS_DIR_GMMLIB}/CachePolicy/GmmGen12dGPUCachePolicy.h
+                        ${BS_DIR_GMMLIB}/CachePolicy/GmmXe_LPGCachePolicy.h
+			${BS_DIR_GMMLIB}/CachePolicy/GmmGen12dGPUCachePolicy.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen8CachePolicy.h
 			${BS_DIR_GMMLIB}/CachePolicy/GmmGen9CachePolicy.h
 			)
@@ -351,6 +382,7 @@ source_group("Header Files\\External\\Common\\Cache Policy" FILES
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen10.h
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen11.h
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen12.h
+			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyXe_LPG.h
                         ${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen12dGPU.h
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen8.h
 			${BS_DIR_GMMLIB}/inc/External/Common/CachePolicy/GmmCachePolicyGen9.h
@@ -378,6 +410,7 @@ source_group("Header Files\\Internal\\Common\\Texture" FILES
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen10TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen11TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen12TextureCalc.h
+			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmXe_LPGTextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen7TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen8TextureCalc.h
 			${BS_DIR_GMMLIB}/inc/Internal/Common/Texture/GmmGen9TextureCalc.h
@@ -405,6 +438,10 @@ include_directories(BEFORE ${PROJECT_SOURCE_DIR})
   ${BS_DIR_INSTALL}
   #${BS_DIR_ANDROID}/include
   )
+
+if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^aarch")
+    include_directories(${GFX_DEVELOPMENT_DIR}/third_party/sse2neon)
+endif()
 
 set(headers
 	${HEADERS_}

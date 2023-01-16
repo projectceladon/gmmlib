@@ -67,16 +67,14 @@ eg:
 ///
 /// @param[in]  Platform: Contains information about platform to initialize an object
 /////////////////////////////////////////////////////////////////////////////////////
-GmmLib::PlatformInfoGen12::PlatformInfoGen12(PLATFORM &Platform)
-    : PlatformInfoGen11(Platform)
-
+GmmLib::PlatformInfoGen12::PlatformInfoGen12(PLATFORM &Platform, Context *pGmmLibContext)
+    : PlatformInfoGen11(Platform, pGmmLibContext)
 {
-    __GMM_ASSERTPTR(pGmmGlobalContext, VOIDRETURN);
+    __GMM_ASSERTPTR(pGmmLibContext, VOIDRETURN);
 
     //Compression format update
     GMM_RESOURCE_FORMAT GmmFormat;
-#define GMM_FORMAT_SKU(FtrXxx) (pGmmGlobalContext->GetSkuTable().FtrXxx != 0)
-#define GMM_COMPR_FORMAT_INVALID ((pGmmGlobalContext->GetSkuTable().FtrFlatPhysCCS != 0) ? static_cast<uint8_t>(GMM_FLATCCS_FORMAT_INVALID) : static_cast<uint8_t>(GMM_E2ECOMP_FORMAT_INVALID))
+#define GMM_FORMAT_SKU(FtrXxx) (pGmmLibContext->GetSkuTable().FtrXxx != 0)
 #define GMM_FORMAT(Name, bpe, _Width, _Height, _Depth, IsRT, IsASTC, RcsSurfaceFormat, SSCompressionFmt, Availability) \
                                                                                                                        \
     {                                                                                                                  \
@@ -307,8 +305,16 @@ FCRECTALIGN(TILE__64_2D_128bpe, 128,  32,  32,   32, 32);
     // clang-format on
     Data.NoOfBitsSupported                = 39;
     Data.HighestAcceptablePhysicalAddress = GFX_MASK_LARGE(0, 38);
-    if(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_S ||
-       (GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_P) || (GFX_GET_CURRENT_PRODUCT(Data.Platform) >= IGFX_XE_HP_SDV))
+
+    if(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_PVC)
+    {
+        Data.NoOfBitsSupported                = 52;
+        Data.HighestAcceptablePhysicalAddress = GFX_MASK_LARGE(0, 51);
+    }
+    else if(GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_S ||
+       (GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_P) || 
+       (GFX_GET_CURRENT_PRODUCT(Data.Platform) == IGFX_ALDERLAKE_N) ||
+       (GFX_GET_CURRENT_PRODUCT(Data.Platform) >= IGFX_XE_HP_SDV))
     {
         Data.NoOfBitsSupported                = 46;
         Data.HighestAcceptablePhysicalAddress = GFX_MASK_LARGE(0, 45);
@@ -392,7 +398,7 @@ uint8_t GmmLib::PlatformInfoGen12::ValidateCCS(GMM_TEXTURE_INFO &Surf)
         return 0;
     }
 
-    if(!pGmmGlobalContext->GetSkuTable().FtrLinearCCS &&
+    if(!pGmmLibContext->GetSkuTable().FtrLinearCCS &&
        (Surf.Type == RESOURCE_3D || Surf.MaxLod > 0 || Surf.MSAA.NumSamples > 1 ||
         !(Surf.Flags.Info.TiledYf || GMM_IS_64KB_TILE(Surf.Flags))))
     {
@@ -484,18 +490,28 @@ uint8_t GmmLib::PlatformInfoGen12::OverrideCompressionFormat(GMM_RESOURCE_FORMAT
 {
 
     uint8_t CompressionFormat = Data.FormatTable[Format].CompressionFormat.CompressionFormat;
-    if(pGmmGlobalContext->GetSkuTable().FtrFlatPhysCCS)
+    if(pGmmLibContext->GetSkuTable().FtrFlatPhysCCS || pGmmLibContext->GetSkuTable().FtrUnified3DMediaCompressionFormats)
     {
         if(!IsMC &&
+           !pGmmLibContext->GetSkuTable().FtrUnified3DMediaCompressionFormats &&
            (CompressionFormat < GMM_FLATCCS_MIN_RC_FORMAT ||
             CompressionFormat > GMM_FLATCCS_MAX_RC_FORMAT))
         {
             CompressionFormat = GMM_FLATCCS_FORMAT_INVALID;
         }
 
-        if(IsMC)
+	if(!IsMC &&
+           pGmmLibContext->GetSkuTable().FtrUnified3DMediaCompressionFormats &&
+           (CompressionFormat < GMM_UNIFIED_COMP_MIN_RC_FORMAT ||
+            CompressionFormat > GMM_UNIFIED_COMP_MAX_RC_FORMAT))
         {
-                if(CompressionFormat >= GMM_FLATCCS_MIN_MC_FORMAT && CompressionFormat <= GMM_FLATCCS_MAX_MC_FORMAT)
+            CompressionFormat = GMM_UNIFIED_COMP_FORMAT_INVALID;
+        }
+	else if(IsMC)
+        {
+            if(!pGmmLibContext->GetSkuTable().FtrUnified3DMediaCompressionFormats)
+            {
+		if(CompressionFormat >= GMM_FLATCCS_MIN_MC_FORMAT && CompressionFormat <= GMM_FLATCCS_MAX_MC_FORMAT)
                 {
                     //True MC format encodings, drop MC-identify bit (ie bit5)
                     CompressionFormat -= (GMM_FLATCCS_MIN_MC_FORMAT - 1);
@@ -528,8 +544,50 @@ uint8_t GmmLib::PlatformInfoGen12::OverrideCompressionFormat(GMM_RESOURCE_FORMAT
                         CompressionFormat -= (GMM_FLATCCS_MIN_MC_FORMAT - 1);
                     }
                 }
-         }
+	    }
+            else
+            {
+                if(CompressionFormat >= GMM_UNIFIED_COMP_MIN_MC_FORMAT && CompressionFormat <= GMM_UNIFIED_COMP_MAX_MC_FORMAT)
+                {
+                    //True MC format encodings, drop MC-identify bit (ie bit5)
+                    CompressionFormat -= (GMM_UNIFIED_COMP_MIN_MC_FORMAT - 1);
+                }
+                else
+                {
+                    // RC format encoding, needs MC format encoding for MC usage
+                    switch(CompressionFormat)
+                    {
+                        case GMM_UNIFIED_COMP_FORMAT_RGB10A2:
+                            CompressionFormat = GMM_UNIFIED_COMP_FORMAT_RGB10b;
+                            break;
+                        case GMM_UNIFIED_COMP_FORMAT_RGBA16U:
+                        case GMM_UNIFIED_COMP_FORMAT_RGBA16F:
+                            CompressionFormat = GMM_UNIFIED_COMP_FORMAT_RGBA16_MEDIA;
+                            break;
+                        case GMM_UNIFIED_COMP_FORMAT_RGBA8U:
+                        case GMM_UNIFIED_COMP_FORMAT_RGBA8S:
+                            CompressionFormat = GMM_UNIFIED_COMP_FORMAT_ARGB8b;
+                            break;
+                        default:
+                            if(CompressionFormat < GMM_UNIFIED_COMP_MIN_MC_FORMAT || CompressionFormat > GMM_UNIFIED_COMP_MAX_MC_FORMAT)
+                            {
+                                CompressionFormat = GMM_UNIFIED_COMP_FORMAT_INVALID;
+                            }
+                            break;
+                    }
 
+                    if(CompressionFormat != GMM_UNIFIED_COMP_FORMAT_INVALID)
+                    {
+                        //drop MC-identify bit (ie bit 5)
+                        CompressionFormat -= (GMM_UNIFIED_COMP_MIN_MC_FORMAT - 1);
+                    }
+		}
+	    }
+        }
+
+	//Assert if out of MC/RC encoding range -ie format-table must be corrected for Compression code
+        __GMM_ASSERT(!pGmmLibContext->GetSkuTable().FtrUnified3DMediaCompressionFormats && CompressionFormat != GMM_FLATCCS_FORMAT_INVALID ||
+                     pGmmLibContext->GetSkuTable().FtrUnified3DMediaCompressionFormats && CompressionFormat != GMM_UNIFIED_COMP_FORMAT_INVALID);
     }
 
     return CompressionFormat;

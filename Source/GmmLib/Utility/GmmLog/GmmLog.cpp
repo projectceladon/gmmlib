@@ -38,7 +38,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 /// Logger instance shared by all of GmmLib within a process
+#if(_DEBUG || _RELEASE_INTERNAL)
 GmmLib::Logger &GmmLoggerPerProc = GmmLib::Logger::CreateGmmLogSingleton();
+#endif
 
 #if _WIN32
 namespace spdlog
@@ -88,9 +90,6 @@ bool GmmLib::Logger::GmmLogInit()
     {
         switch(static_cast<GmmLogLevel>(regkeyVal))
         {
-            case Off:
-                LogLevel = spdlog::level::off;
-                break;
             case Trace:
                 LogLevel = spdlog::level::trace;
                 break;
@@ -100,10 +99,22 @@ bool GmmLib::Logger::GmmLogInit()
             case Error:
                 LogLevel = spdlog::level::err;
                 break;
-        }
+	    case Critical:
+		LogLevel = spdlog::level::critical;
+                break;
+            case Off:
+            default:
+                LogLevel = spdlog::level::off;
+                break;
+	}
     }
 
 #endif
+    if(LogLevel == spdlog::level::off)
+    {
+        return false;
+    }
+
     try
     {
         if(LogMethod == ToFile)
@@ -162,8 +173,11 @@ bool GmmLib::Logger::GmmLogInit()
 
             // TODO: Multiple GmmLib instance can be running in the same process. In that case, the file name will be
             // the same for two instances. Figure out a way to differentiate between the two instances.
-            LogFilePath = std::string(GMM_LOG_FILENAME) + "_" + ProcName + "_" + PidStr;
-
+#if _WIN32
+	    LogFilePath = std::string("c:\\") + std::string(GMM_LOG_FILENAME) + "_" + ProcName + "_" + PidStr;
+#else
+	    LogFilePath = std::string(".//") + std::string(GMM_LOG_FILENAME) + "" + ProcName + "_" + PidStr;
+#endif
             // Create logger
             SpdLogger = spdlog::rotating_logger_mt(GMM_LOGGER_NAME,
                                                    LogFilePath,
@@ -211,7 +225,7 @@ bool GmmLib::Logger::GmmLogInit()
 /////////////////////////////////////////////////////////////////////////////////////
 GmmLib::Logger::Logger()
     : LogMethod(ToOSLog),
-      LogLevel(spdlog::level::err)
+      LogLevel(spdlog::level::off)
 {
     if(!GmmLogInit())
     {
@@ -253,28 +267,29 @@ inline int vscprintf_lin(const char *msg, va_list args)
 /////////////////////////////////////////////////////////////////////////////////////
 extern "C" void GMM_STDCALL GmmLibLogging(GmmLogLevel Level, const char *str, ...)
 {
-    va_list args;
-    va_start(args, str);
+   va_list args;
 
-#if _WIN32
-    const size_t length = _vscprintf(str, args);
-#else
-    const size_t length = vscprintf_lin(str, args);
-#endif
-
-    char *temp = new char[length + 1];
-
-    if(temp)
+    if(GmmLoggerPerProc.SpdLogger)
     {
+        va_start(args, str);
 
 #if _WIN32
-        vsprintf_s(temp, length + 1, str, args);
+        const size_t length = _vscprintf(str, args);
 #else
-        vsnprintf(temp, length + 1, str, args);
+        const size_t length = vscprintf_lin(str, args);
 #endif
 
-        if(GmmLoggerPerProc.SpdLogger)
+        char *temp = new char[length + 1];
+
+        if(temp)
         {
+
+#if _WIN32
+            vsprintf_s(temp, length + 1, str, args);
+#else
+            vsnprintf(temp, length + 1, str, args);
+#endif
+
             switch(Level)
             {
                 case Trace:
@@ -293,11 +308,12 @@ extern "C" void GMM_STDCALL GmmLibLogging(GmmLogLevel Level, const char *str, ..
                 default:
                     break;
             }
-        }
 
-        delete[] temp;
+            delete[] temp;
+        }
     }
 
     va_end(args);
 }
+
 #endif //#if GMM_LOG_AVAILABLE

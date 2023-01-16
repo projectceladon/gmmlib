@@ -94,7 +94,6 @@ typedef struct GMM_RESOURCE_FLAG_REC
     struct
     {
         uint32_t AllowVirtualPadding       : 1;
-        uint32_t ApertureOnly              : 1; // Renaming ApertureOnly to NonLocalOnly, Will remove once all clients are moved to NonLocalOnly.
         uint32_t BigPage                   : 1;
         uint32_t Cacheable                 : 1;
         uint32_t ContigPhysMemoryForiDART  : 1; // iDART clients only; resource allocation must be physically contiguous.
@@ -124,7 +123,7 @@ typedef struct GMM_RESOURCE_FLAG_REC
         uint32_t Shared                    : 1;
         uint32_t SoftwareProtected         : 1; // Resource is driver protected against CPU R/W access
         uint32_t SVM                       : 1; // Shared Virtual Memory (i.e. GfxAddr = CpuAddr) Can only be set for ExistingSysMem allocations.
-        uint32_t TiledW                    : 1; // Tiling preference for the allocation. (second lowest priority) Y>X>W>L. Special use case.
+	uint32_t TiledW                    : 1; // Tiling preference for the allocation. (second lowest priority) Y>X>W>L. Special use case.
         uint32_t TiledX                    : 1; // Tiling preference for the allocation. (second highest priority) Y>X>W>L. Common use case.
         uint32_t TiledY                    : 1; // Tiling preference for the allocation. (highest priority) Y>X>W>L. Common use case. Displayable GEn9+
         uint32_t TiledYf                   : 1; // Tiling modifier for the allocation. Affects Linear and Y preferences. Gen9+
@@ -133,8 +132,8 @@ typedef struct GMM_RESOURCE_FLAG_REC
         uint32_t XAdapter                  : 1; // For WinBlue: to support Hybrid graphics
         uint32_t __PreallocatedResInfo     : 1; // Internal GMM flag--Clients don't set.
         uint32_t __PreWddm2SVM             : 1; // Internal GMM flag--Clients don't set.
-        uint32_t Tile4                     : 1; // XE-HP 4KB tile
-        uint32_t Tile64                    : 1; // XE-HP 64KB tile
+        uint32_t Tile4                     : 1; // 4KB tile
+        uint32_t Tile64                    : 1; // 64KB tile
     } Info;
 
     // Wa: Any Surface specific Work Around will go in here
@@ -151,7 +150,10 @@ typedef struct GMM_RESOURCE_FLAG_REC
         uint32_t DisableDisplayCcsClearColor       : 1; // Disables display clear color
         uint32_t DisableDisplayCcsCompression      : 1; // Disables display decompression on the surface (it disables display awareness of both fast clear/render compression)
         uint32_t PreGen12FastClearOnly             : 1; // i.e. AUX_CCS_D (instead of AUX_CCS_E). Flag carried by GMM between UMDs to support shared resources.
-        uint32_t Reserved                          : 1; // Reserved
+	uint32_t MediaPipeUsage                    : 1; // TileHeight Aligned ArrayQPitch on Tile4/TileY
+        uint32_t ForceStdAllocAlign                : 1; // Align standard allocation to 2MB, allowing 64K-PageTable. Set by KMD, not be used by UMDs
+        uint32_t DeniableLocalOnlyForCompression   : 1; // Align standard allocation to 2MB, allowing 64K-PageTable. Set by KMD, not be used by UMDs
+
     } Wa;
 
 } GMM_RESOURCE_FLAG;

@@ -43,7 +43,7 @@ Description: UMD-TT manager (manages both TR-TT and AUX-TT in user mode space)
     {                                    \
         LeaveCriticalSection(&PoolLock); \
     }
-
+extern GMM_MA_LIB_CONTEXT *pGmmMALibContext;
 #if defined(__linux__)
 GMM_STATUS GmmLib::__GmmDeviceAlloc(GmmClientContext *        pClientContext,
                                     GMM_DEVICE_CALLBACKS_INT *pDeviceCbInt,
@@ -78,7 +78,9 @@ GMM_STATUS GmmLib::__GmmDeviceAlloc(GmmClientContext *        pClientContext,
 
 GMM_STATUS GmmLib::__GmmDeviceDealloc(GMM_CLIENT                ClientType,
                                       GMM_DEVICE_CALLBACKS_INT *DeviceCb,
-                                      GMM_DEVICE_DEALLOC *      pDealloc)
+                                      GMM_DEVICE_DEALLOC *      pDealloc,
+                                      GmmClientContext *        pClientContext)
+
 {
     GMM_DDI_DEALLOCATE DeAlloc = {0};
     int                err     = 0;
@@ -217,7 +219,7 @@ void GmmLib::GmmPageTableMgr::__ReleaseUnusedPool(GMM_UMD_SYNCCONTEXT *UmdContex
             Dealloc.Priv   = Pool->GetGmmResInfo();
             Dealloc.hCsr   = hCsr;
 
-            Status = __GmmDeviceDealloc(ClientType, &DeviceCbInt, &Dealloc);
+            Status = __GmmDeviceDealloc(ClientType, &DeviceCbInt, &Dealloc, pClientContext);
 
             __GMM_ASSERT(GMM_SUCCESS == Status);
 
@@ -262,9 +264,8 @@ GmmLib::GMM_PAGETABLEPool *GmmLib::GmmPageTableMgr::__GetFreePoolNode(uint32_t *
     Pool = (PoolType == POOL_TYPE_TRTTL2) ? Pool : //1st pool reserved for TRTT-L2, since TRTT-L2 pruning not supported yet,
            (Pool ? Pool->GetNextPool() : NULL);    //other pools can be TR-L1/Aux-L1/Aux-L2 (and support dynamic pruning)
     TRTTPool      = (PoolType == POOL_TYPE_TRTTL2 || PoolType == POOL_TYPE_TRTTL1) ? true : false;
-    DWdivisor     = TRTTPool ? 8 * sizeof(uint32_t) : (PoolType == POOL_TYPE_AUXTTL2) ? 8 * sizeof(uint32_t) * AUX_L2TABLE_SIZE_IN_POOLNODES : 8 * sizeof(uint32_t) * AUX_L1TABLE_SIZE_IN_POOLNODES;
-    IdxMultiplier = TRTTPool ? 1 : (PoolType == POOL_TYPE_AUXTTL2) ? AUX_L2TABLE_SIZE_IN_POOLNODES : AUX_L1TABLE_SIZE_IN_POOLNODES;
-
+    DWdivisor     = TRTTPool ? 8 * sizeof(uint32_t) : (PoolType == POOL_TYPE_AUXTTL2) ? 8 * sizeof(uint32_t) * AUX_L2TABLE_SIZE_IN_POOLNODES : 8 * sizeof(uint32_t) * AUX_L1TABLE_SIZE_IN_POOLNODES_2(GetLibContext());
+    IdxMultiplier = TRTTPool ? 1 : (PoolType == POOL_TYPE_AUXTTL2) ? AUX_L2TABLE_SIZE_IN_POOLNODES : AUX_L1TABLE_SIZE_IN_POOLNODES_2(GetLibContext());
     //Scan existing PageTablePools for free pool node
     for(i = (PoolType == POOL_TYPE_TRTTL2) ? 0 : 1; Pool && i < NumNodePoolElements; i++)
     {
@@ -353,11 +354,11 @@ GmmLib::GmmPageTableMgr::GmmPageTableMgr(GMM_DEVICE_CALLBACKS_INT *DeviceCB, uin
         ptr->pClientContext = pClientContextIn;
         memcpy(&ptr->DeviceCbInt, DeviceCB, sizeof(GMM_DEVICE_CALLBACKS_INT));
 
-        if(pGmmGlobalContext->GetSkuTable().FtrE2ECompression &&
-           !pGmmGlobalContext->GetSkuTable().FtrFlatPhysCCS)
+        if(pClientContextIn->GetSkuTable().FtrE2ECompression &&
+           !pClientContextIn->GetSkuTable().FtrFlatPhysCCS)
         {
             __GMM_ASSERT(TTFlags & AUXTT); //Aux-TT is mandatory
-            ptr->AuxTTObj = new AuxTable();
+            ptr->AuxTTObj = new AuxTable(pClientContext);
             if(!ptr->AuxTTObj)
             {
                 goto ERROR_CASE;
@@ -429,14 +430,14 @@ GMM_STATUS GmmLib::GmmPageTableMgr::InitContextAuxTableRegister(HANDLE CmdQHandl
     GMM_UNREFERENCED_PARAMETER(engType);
 
     //Check FtrE2ECompression = 1
-    if(pGmmGlobalContext->GetSkuTable().FtrE2ECompression && AuxTTObj != NULL)
+    if(GetLibContext()->GetSkuTable().FtrE2ECompression && AuxTTObj != NULL)
     {
         EnterCriticalSection(&AuxTTObj->TTLock);
         if(CmdQHandle)
         {
             //engType = ENGINE_TYPE_RCS;            //use correct offset based on engType (once per-eng offsets known)
             uint64_t RegOffset = 0, L3AdrReg = 0;
-            GET_L3ADROFFSET(0, L3AdrReg);
+            GET_L3ADROFFSET(0, L3AdrReg, GetLibContext());
 
             RegOffset = (L3AdrReg + sizeof(uint32_t));
             RegOffset = L3AdrReg | (RegOffset << 0x20);
@@ -447,7 +448,7 @@ GMM_STATUS GmmLib::GmmPageTableMgr::InitContextAuxTableRegister(HANDLE CmdQHandl
 
             TTCb.pfWriteL3Adr(CmdQHandle, MaskedL3GfxAddress, RegOffset);
 
-            GMM_DPF(GFXDBG_CRITICAL, "AuxTT Map Address: GPUVA=0x%016llX\n", MaskedL3GfxAddress);
+            GMM_DPF(GFXDBG_NORMAL, "AuxTT Map Address: GPUVA=0x%016llX\n", MaskedL3GfxAddress);
 
             //TTCb.pfEpilogTranslationTable(CmdQHandle, 0);
 

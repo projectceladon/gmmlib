@@ -33,6 +33,33 @@ if(NOT DEFINED _bs_include_base_utils)
     endif()
   endmacro()
 
+  macro(bs_compare_build_type _bs_compare_var)
+    if ("${_bs_compare_var}" STREQUAL "Release" OR "${_bs_compare_var}" STREQUAL "release")
+        set(T_CMAKE_BUILD_TYPE "Release")
+        set(BUILD_TYPE "release")
+    elseif ("${_bs_compare_var}" STREQUAL "ReleaseInternal" OR "${_bs_compare_var}" STREQUAL "release-internal" OR 
+            "${_bs_compare_var}" STREQUAL "Release-Internal")
+        set(T_CMAKE_BUILD_TYPE "ReleaseInternal")
+        set(BUILD_TYPE "release-internal")
+    elseif ("${_bs_compare_var}" STREQUAL "Debug" OR "${_bs_compare_var}" STREQUAL "debug")
+        set(T_CMAKE_BUILD_TYPE "Debug")
+        set(BUILD_TYPE "debug")
+    elseif ("${_bs_compare_var}" STREQUAL "RelWithDebInfo" OR "${_bs_compare_var}" STREQUAL "RELWITHDEBINFO" OR
+            "${_bs_compare_var}" STREQUAL "relwithdebinfo")
+        set(T_CMAKE_BUILD_TYPE "RelWithDebInfo")
+        set(BUILD_TYPE "RelWithDebInfo")
+    elseif ("${_bs_compare_var}" STREQUAL "MinSizeRel" OR "${_bs_compare_var}" STREQUAL "MINSIZEREL" OR
+            "${_bs_compare_var}" STREQUAL "minsizerel")
+        set(T_CMAKE_BUILD_TYPE "MinSizeRel")
+        set(BUILD_TYPE "MinSizeRel")
+    else()
+	#Pass the flag as received from user, Could be a custom flag setting
+        message("Build Type: ${_bs_compare_var} is a custom build type")
+        set(T_CMAKE_BUILD_TYPE "${_bs_compare_var}")
+        set(BUILD_TYPE "${_bs_compare_var}")
+    endif()  
+  endmacro()  
+
   set(_bs_check_build_type_done 0)
 
   # function bs_check_build_type
@@ -43,38 +70,66 @@ if(NOT DEFINED _bs_include_base_utils)
   # Note: Despite the similarity of name, CMAKE_BUILD_TYPE is not analogous
   # to UFO_BUILD_TYPE and BUILD_TYPE.
   function(bs_check_build_type)
-    if(NOT ${_bs_check_build_type_done})
-      set(_bs_check_build_type_done 1 PARENT_SCOPE)
-      set(_bs_bt_var_names UFO_BUILD_TYPE BUILD_TYPE)
-      foreach(_bs_bt_var_a ${_bs_bt_var_names})
-        foreach(_bs_bt_var_b ${_bs_bt_var_names})
-          if(NOT _bs_bt_var_a STREQUAL _bs_bt_var_b)
-            if(DEFINED ${_bs_bt_var_a} AND DEFINED ${_bs_bt_var_b} AND NOT ${_bs_bt_var_a} STREQUAL ${_bs_bt_var_b})
-              message(FATAL_ERROR "Conflict: ${_bs_bt_var_a}=${${_bs_bt_var_a}} vs ${_bs_bt_var_b=${${_bs_bt_var_b}}}")
+
+    if(DEFINED CMAKE_BUILD_TYPE AND NOT "${CMAKE_BUILD_TYPE}" STREQUAL ""
+        AND NOT "${CMAKE_BUILD_TYPE}" STREQUAL "None")
+
+	set(_bs_check_build_type_done 1 PARENT_SCOPE)
+
+        bs_compare_build_type("${CMAKE_BUILD_TYPE}")
+	set(CMAKE_BUILD_TYPE "${T_CMAKE_BUILD_TYPE}" PARENT_SCOPE) #set in parent scope
+	set(CMAKE_BUILD_TYPE "${T_CMAKE_BUILD_TYPE}") #set in current scope
+
+	set(BUILD_TYPE "${BUILD_TYPE}" PARENT_SCOPE)
+
+	message(STATUS "Single-configuration generator. Build type : ${CMAKE_BUILD_TYPE}")
+
+    elseif(DEFINED BUILD_TYPE AND NOT "${BUILD_TYPE}" STREQUAL "")
+
+	    set(_bs_check_build_type_done 1 PARENT_SCOPE)
+
+	    bs_compare_build_type("${BUILD_TYPE}")
+	    set(CMAKE_BUILD_TYPE "${T_CMAKE_BUILD_TYPE}" PARENT_SCOPE) #set in parent scope
+	    set(CMAKE_BUILD_TYPE "${T_CMAKE_BUILD_TYPE}") #set in current scope
+            set(BUILD_TYPE "${BUILD_TYPE}" PARENT_SCOPE)
+
+	    message(STATUS "Single-configuration generator. Build type : ${CMAKE_BUILD_TYPE}")
+
+    else()
+	    # If Build Type is not passed, Set as release builds as default
+        if(NOT ${_bs_check_build_type_done})
+            set(_bs_check_build_type_done 1 PARENT_SCOPE)
+            set(_bs_bt_var_names UFO_BUILD_TYPE BUILD_TYPE)
+            foreach(_bs_bt_var_a ${_bs_bt_var_names})
+                foreach(_bs_bt_var_b ${_bs_bt_var_names})
+                  if(NOT _bs_bt_var_a STREQUAL _bs_bt_var_b)
+                    if(DEFINED ${_bs_bt_var_a} AND DEFINED ${_bs_bt_var_b} AND NOT ${_bs_bt_var_a} STREQUAL ${_bs_bt_var_b})
+                        message(FATAL_ERROR "Conflict: ${_bs_bt_var_a}=${${_bs_bt_var_a}} vs ${_bs_bt_var_b=${${_bs_bt_var_b}}}")
+                    endif()
+                  endif()
+                endforeach()
+            endforeach()
+            set(_bs_bt_value "")
+            foreach(_bs_bt_var_a ${_bs_bt_var_names})
+                if(DEFINED ${_bs_bt_var_a})
+                    set(_bs_bt_value ${${_bs_bt_var_a}})
+                    break()
+                endif()
+            endforeach()
+
+            if(_bs_bt_value STREQUAL "")
+                message("*BUILD_TYPE not defined, default to: release")
+                set(_bs_bt_value "release")
             endif()
-          endif()
-        endforeach()
-      endforeach()
-      set(_bs_bt_value "")
-      foreach(_bs_bt_var_a ${_bs_bt_var_names})
-        if(DEFINED ${_bs_bt_var_a})
-          set(_bs_bt_value ${${_bs_bt_var_a}})
-          break()
-        endif()
-      endforeach()
 
-      if(_bs_bt_value STREQUAL "")
-        message("*BUILD_TYPE not defined, default to: release")
-        set(_bs_bt_value "release")
-      endif()
-
-      foreach(_bs_bt_var_a ${_bs_bt_var_names})
-        if(NOT DEFINED ${_bs_bt_var_a})
-          set(${_bs_bt_var_a} "${_bs_bt_value}" PARENT_SCOPE)
+            foreach(_bs_bt_var_a ${_bs_bt_var_names})
+                if(NOT DEFINED ${_bs_bt_var_a})
+                  set(${_bs_bt_var_a} "${_bs_bt_value}" PARENT_SCOPE)
+                endif()
+            endforeach()
         endif()
-      endforeach()
+
     endif()
+
   endfunction(bs_check_build_type)
-
-
 endif(NOT DEFINED _bs_include_base_utils)

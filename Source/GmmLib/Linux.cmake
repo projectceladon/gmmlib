@@ -19,8 +19,44 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 #this file should contain only compiler and linker flags
+if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^aarch")
+    SET (GMMLIB_COMPILER_FLAGS_COMMON
+    #general warnings
+    #-Wall
+    -Winit-self
+    -Winvalid-pch
+    -Wpointer-arith
+    -Wno-unused
+    -Wno-unknown-pragmas
+    -Wno-comments
+    -Wno-narrowing
+    -Wno-overflow
+    -Wno-parentheses
+    -Wno-missing-braces
+    -Wno-sign-compare
+    -Werror=address
+    -Werror=format-security
+    -Werror=return-type
 
-SET (GMMLIB_COMPILER_FLAGS_COMMON
+    # General optimization options
+    -march=${GMMLIB_MARCH}
+    -finline-functions
+    -fno-short-enums
+    -Wa,--noexecstack
+    -fno-strict-aliasing
+    # Common defines
+    -DUSE_NEON
+    # Other common flags
+    -fstack-protector
+    -fdata-sections
+    -ffunction-sections
+    -fmessage-length=0
+    -fvisibility=hidden
+    -fPIC
+    -g
+    )
+else()
+    SET (GMMLIB_COMPILER_FLAGS_COMMON
     #general warnings
     -Wall
     -Winit-self
@@ -37,7 +73,6 @@ SET (GMMLIB_COMPILER_FLAGS_COMMON
     -Wno-enum-compare
     -Werror=address
     -Werror=format-security
-    -Werror=non-virtual-dtor
     -Werror=return-type
 
     # General optimization options
@@ -72,6 +107,7 @@ SET (GMMLIB_COMPILER_FLAGS_COMMON
     # -m32 or -m64
     -m${GMMLIB_ARCH}
     )
+endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 #Gcc only flags
@@ -96,6 +132,7 @@ SET (GMMLIB_COMPILER_CXX_FLAGS_COMMON
     -fcheck-new
     -std=c++11
     -pthread
+    -Werror=non-virtual-dtor
     )
 
 SET (GMMLIB_COMPILER_FLAGS_DEBUG
@@ -137,5 +174,10 @@ foreach (flag ${GMMLIB_COMPILER_CXX_FLAGS_COMMON})
     SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
 endforeach()
 
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m${GMMLIB_ARCH}")
-SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -m${GMMLIB_ARCH}")
+if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "^aarch")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+    SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+else()
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -m${GMMLIB_ARCH}")
+    SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -m${GMMLIB_ARCH}")
+endif()

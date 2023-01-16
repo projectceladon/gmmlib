@@ -49,7 +49,7 @@ int32_t GmmLib::GmmGen12dGPUCachePolicy::IsSpecialMOCSUsage(GMM_RESOURCE_USAGE_T
     {
         case GMM_RESOURCE_USAGE_CCS:
             __GMM_ASSERT(pCachePolicy[Usage].L3 == 0 &&      //Architecturally, CCS isn't L3-cacheable.
-                         pCachePolicy[Usage].UcLookup == 0);  // On DG1/XE_HP_SDV, CCS Resource is never cached in L3, so LookUp is N/A
+                         pCachePolicy[Usage].UcLookup == 0);  // On DG1/XE_HP_SDV/DG2, CCS Resource is never cached in L3, so LookUp is N/A
             MocsIdx = 60;
             break;
         case GMM_RESOURCE_USAGE_MOCS_62:
@@ -89,12 +89,13 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
 
     __GMM_ASSERTPTR(pCachePolicy, GMM_ERROR);
 
-#define DEFINE_CACHE_ELEMENT(usage, l3, l3_scc, hdcl1, go, uclookup) DEFINE_CP_ELEMENT(usage, 0, 0, l3, 0, 0, 0, 0, l3_scc, 0, 0, 0, hdcl1, 0, 0, go, uclookup)
+#define DEFINE_CACHE_ELEMENT(usage, l3, l3_scc, hdcl1, go, uclookup, l1cc) DEFINE_CP_ELEMENT(usage, 0, 0, l3, 0, 0, 0, 0, l3_scc, 0, 0, 0, hdcl1, 0, 0, go, uclookup, l1cc, 0, 0, 0)
 
 #include "GmmGen12dGPUCachePolicy.h"
 
 #define L3_UNCACHEABLE (0x1)
 #define L3_WB_CACHEABLE (0x3)
+#define L3_PAT_UNCACHEABLE (0x0)
 
 #define DISABLE_SKIP_CACHING_CONTROL (0x0)
 #define ENABLE_SKIP_CACHING_CONTROL (0x1)
@@ -105,6 +106,11 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
     {
         SetUpMOCSTable();
     }
+    
+    if(GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_PVC)
+    {
+        SetupPAT();
+    }
 
     {
         // Define index of cache element
@@ -112,11 +118,8 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
 
 #if(_WIN32 && (_DEBUG || _RELEASE_INTERNAL))
         void *pKmdGmmContext = NULL;
-#if(defined(__GMM_KMD__))
-        pKmdGmmContext = pGmmGlobalContext->GetGmmKmdContext();
-#endif
 
-        OverrideCachePolicy(pKmdGmmContext);
+	OverrideCachePolicy(pKmdGmmContext);
 #endif
 
         // Process the cache policy and fill in the look up table
@@ -124,17 +127,24 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
         {
             bool                         CachePolicyError = false;
             bool                         SpecialMOCS      = false;
-            int32_t                      CPTblIdx         = -1;
-            uint32_t                     j                = 0;
-            uint32_t                     PTEValue         = 0;
-            GMM_CACHE_POLICY_TBL_ELEMENT UsageEle         = {0};
-            uint32_t                     StartMocsIdx     = 0;
+            int32_t                      CPTblIdx = -1, PATIdx = -1;
+            uint32_t                     j = 0, i = 0;
+            uint64_t                     PTEValue        = 0;
+            GMM_CACHE_POLICY_TBL_ELEMENT UsageEle        = {0};
+            uint32_t                     StartMocsIdx    = 0;
+            GMM_PRIVATE_PAT              UsagePATElement = {0};
 
-            switch(GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform))
+
+            switch(GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform))
             {
-                case IGFX_DG1:
+	        case IGFX_DG1:
                 case IGFX_XE_HP_SDV:
+	        case IGFX_PVC:
                     StartMocsIdx = 1; // Index 0 is reserved for Error
+                    break;
+                case IGFX_DG2:
+		    // DG2 provides 2 wires for MOCS Registers, gives 4(2^2) indexes to program.
+                    StartMocsIdx = 0;
                     break;
                 default:
                     StartMocsIdx = 1;
@@ -142,14 +152,14 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
             }
 
             // No Special MOCS handling for next platform
-            if(GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) <= IGFX_XE_HP_SDV)
+            if(GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) < IGFX_DG2)
             {
                 CPTblIdx = IsSpecialMOCSUsage((GMM_RESOURCE_USAGE_TYPE)Usage, SpecialMOCS);
             }
 
-            // Applicable upto only
+            // Applicable upto Xe_HP only
             if(pCachePolicy[Usage].HDCL1 &&
-               (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) <= IGFX_XE_HP_SDV))
+               (GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) <= IGFX_XE_HP_SDV))
             {
                 UsageEle.HDCL1 = 1;
             }
@@ -166,12 +176,18 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
                 UsageEle.L3.SCC = (uint16_t)pCachePolicy[Usage].L3_SCC;
             }
 
+	    if(GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_PVC)
+            {
+                pCachePolicy[Usage].GlbGo    = 0;
+                pCachePolicy[Usage].UcLookup = 0;
+            }
             // Go/Lookup
             // N/A for SpecialMOCS
-            // N/A for DG1, RKL
-            // Applicable for IGFX_XE_HP_SDV only
+            // N/A for DG1, RKL, PVC
+            // Applicable for IGFX_XE_HP_SDV and DG2 only
             if(!SpecialMOCS &&
-               (FROMPRODUCT(XE_HP_SDV)))
+               (FROMPRODUCT(XE_HP_SDV)) &&
+               (GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) != IGFX_PVC))
             {
                 if(pCachePolicy[Usage].L3 == 0)
                 {
@@ -185,7 +201,7 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
             //Special-case MOCS handling for MOCS Table Index 60-63
             if(CPTblIdx >= GMM_GEN12_MAX_NUMBER_MOCS_INDEXES)
             {
-                GMM_CACHE_POLICY_TBL_ELEMENT *TblEle = &pGmmGlobalContext->GetCachePolicyTlbElement()[CPTblIdx];
+                GMM_CACHE_POLICY_TBL_ELEMENT *TblEle = &pGmmLibContext->GetCachePolicyTlbElement()[CPTblIdx];
 
                 if(SpecialMOCS &&
                    !(TblEle->L3.UshortValue == UsageEle.L3.UshortValue))
@@ -200,8 +216,8 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
             {
                 for(j = GMM_GEN10_HDCL1_MOCS_INDEX_START; j <= CurrentMaxL1HdcMocsIndex; j++)
                 {
-                    GMM_CACHE_POLICY_TBL_ELEMENT *TblEle = &pGmmGlobalContext->GetCachePolicyTlbElement()[j];
-                    if(TblEle->L3.UshortValue == UsageEle.L3.UshortValue &&
+                    GMM_CACHE_POLICY_TBL_ELEMENT *TblEle = &pGmmLibContext->GetCachePolicyTlbElement()[j];                    
+		    if(TblEle->L3.UshortValue == UsageEle.L3.UshortValue &&
                        TblEle->HDCL1 == UsageEle.HDCL1)
                     {
                         CPTblIdx = j;
@@ -222,7 +238,8 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
                     }
                     else
                     {
-                        GMM_CACHE_POLICY_TBL_ELEMENT *TblEle = &pGmmGlobalContext->GetCachePolicyTlbElement()[j];
+                        GMM_CACHE_POLICY_TBL_ELEMENT *TblEle = &pGmmLibContext->GetCachePolicyTlbElement()[j];
+
                         if(TblEle->L3.UshortValue == UsageEle.L3.UshortValue)
                         {
                             CPTblIdx = j;
@@ -257,15 +274,54 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
                 CachePolicyError = true;
             }
 
-            pCachePolicy[Usage].PTE.DwordValue = PTEValue;
+            pCachePolicy[Usage].PTE.DwordValue     = PTEValue & 0xFFFFFFFF;
+            pCachePolicy[Usage].PTE.HighDwordValue = 0;
 
-            pCachePolicy[Usage].MemoryObjectOverride.Gen12.Index = CPTblIdx;
+	    pCachePolicy[Usage].MemoryObjectOverride.Gen12.Index = CPTblIdx;
 
             pCachePolicy[Usage].Override = ALWAYS_OVERRIDE;
 
             if(CachePolicyError)
             {
                 GMM_ASSERTDPF("Cache Policy Init Error: Invalid Cache Programming - Element %d", Usage);
+            }
+            
+            if(GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_PVC)
+            {
+                // PAT data
+                {
+                    UsagePATElement.Xe_HPC.Reserved = 0;
+
+                    UsagePATElement.Xe_HPC.MemoryType = pCachePolicy[Usage].L3 ? L3_WB_CACHEABLE : L3_PAT_UNCACHEABLE;
+                    
+                    // try to find a match in static PAT table
+                    for(i = 0; i <= CurrentMaxPATIndex; i++)
+                    {
+                        GMM_PRIVATE_PAT PAT = GetPrivatePATEntry(i);
+                        if(UsagePATElement.Xe_HPC.MemoryType == PAT.Xe_HPC.MemoryType)
+                        {
+                            PATIdx = i;
+                            break;
+                        }
+                    }
+
+                    if(PATIdx == -1)
+                    {
+                         GMM_ASSERTDPF(
+                         "Cache Policy Init Error: Invalid Cache Programming, too many unique caching combinations"
+                         "(we only support NumPATRegisters = %d)",
+                         CurrentMaxPATIndex);
+                         CachePolicyError = true;
+                         // add rterror here <ToDo>
+                          PATIdx = PAT0; // default to uncached PAT index 0: GMM_CP_NON_COHERENT_UC
+                                           // Log Error using regkey to indicate the above error
+                        
+                    }
+                }
+
+                pCachePolicy[Usage].PATIndex           = PATIdx;
+                pCachePolicy[Usage].PTE.DwordValue     = GMM_GET_PTE_BITS_FROM_PAT_IDX(PATIdx) & 0xFFFFFFFF;
+                pCachePolicy[Usage].PTE.HighDwordValue = GMM_GET_PTE_BITS_FROM_PAT_IDX(PATIdx) >> 32;
             }
         }
     }
@@ -287,7 +343,7 @@ GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::InitCachePolicy()
 //-----------------------------------------------------------------------------
 void GmmLib::GmmGen12dGPUCachePolicy::SetUpMOCSTable()
 {
-    GMM_CACHE_POLICY_TBL_ELEMENT *pCachePolicyTlbElement = &(pGmmGlobalContext->GetCachePolicyTlbElement()[0]);
+    GMM_CACHE_POLICY_TBL_ELEMENT *pCachePolicyTlbElement = &(pGmmLibContext->GetCachePolicyTlbElement()[0]);
     CurrentMaxL1HdcMocsIndex                             = 0;
     CurrentMaxSpecialMocsIndex                           = 0;
 
@@ -313,7 +369,7 @@ void GmmLib::GmmGen12dGPUCachePolicy::SetUpMOCSTable()
 
     // clang-format off
 
-    if (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) == IGFX_DG1)
+    if (GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_DG1)
     {
         //Default MOCS Table
         for(int index = 0; index < GMM_MAX_NUMBER_MOCS_INDEXES; index++)
@@ -343,7 +399,7 @@ void GmmLib::GmmGen12dGPUCachePolicy::SetUpMOCSTable()
         CurrentMaxSpecialMocsIndex  = 63;
 
     }
-    else if (GFX_GET_CURRENT_PRODUCT(pGmmGlobalContext->GetPlatformInfo().Platform) == IGFX_XE_HP_SDV)
+    else if (GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_XE_HP_SDV)
      {
         //Default MOCS Table
         for(int index = 0; index < GMM_MAX_NUMBER_MOCS_INDEXES; index++)
@@ -369,9 +425,126 @@ void GmmLib::GmmGen12dGPUCachePolicy::SetUpMOCSTable()
         CurrentMaxSpecialMocsIndex  = 63;
 
     }
+    else if ((GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_DG2))
+     {
+        //Default MOCS Table
+        for(int index = 0; index < GMM_MAX_NUMBER_MOCS_INDEXES; index++)
+        {     //             Index     ESC	  SCC	  L3CC    Go      LookUp    HDCL1
+             GMM_DEFINE_MOCS( index  , 0     , 0     , 3     , 0     , 1       , 0 )
+        }
+         // Fixed MOCS Table
+        //              Index     ESC	  SCC	  L3CC    Go      LookUp    HDCL1
+        GMM_DEFINE_MOCS( 0      , 0     , 0     , 1     , 0     , 1       , 0 )
+        GMM_DEFINE_MOCS( 1      , 0     , 0     , 1     , 1     , 1       , 0 )
+        GMM_DEFINE_MOCS( 2      , 0     , 0     , 1     , 1     , 0       , 0 )
+        GMM_DEFINE_MOCS( 3      , 0     , 0     , 3     , 0     , 1       , 0 )
 
+        CurrentMaxMocsIndex         = 3;
+    }
+    else if (GFX_GET_CURRENT_PRODUCT(pGmmLibContext->GetPlatformInfo().Platform) == IGFX_PVC) 
+     {
+         //Default MOCS Table
+        for(int index = 0; index < GMM_MAX_NUMBER_MOCS_INDEXES; index++)
+        {     //             Index     ESC	  SCC	  L3CC    Go      LookUp    HDCL1
+             GMM_DEFINE_MOCS( index  , 0     , 0     , 3     , 0     , 0       , 0 )
+        }
+         // Fixed MOCS Table
+        //              Index     ESC	  SCC	  L3CC    Go      LookUp    HDCL1
+        GMM_DEFINE_MOCS( 1      , 0     , 0     , 1     , 0     , 0       , 0 )
+        GMM_DEFINE_MOCS( 2      , 0     , 0     , 3     , 0     , 0       , 0 )
+
+        CurrentMaxMocsIndex         = 2;
+     }
 // clang-format on
 
 
 #undef GMM_DEFINE_MOCS
+}
+
+//=============================================================================
+//
+// Function: SetupPAT
+//
+// Desc:
+//
+// Parameters:
+//
+// Return: GMM_STATUS
+//
+//-----------------------------------------------------------------------------
+GMM_STATUS GmmLib::GmmGen12dGPUCachePolicy::SetupPAT()
+{
+    GMM_PRIVATE_PAT *pPATTlbElement = &(pGmmLibContext->GetPrivatePATTable()[0]);
+
+#define L3_UC (0x0)
+#define L3_WC (0x1)
+#define L3_WT (0x2)
+#define L3_WB (0x3)
+
+#define GMM_DEFINE_PAT_ELEMENT(indx, CLOS, L3Caching)       \
+    {                                                       \
+        pPATTlbElement[indx].Xe_HPC.MemoryType = L3Caching; \
+        pPATTlbElement[indx].Xe_HPC.L3CLOS     = CLOS;      \
+        pPATTlbElement[indx].Xe_HPC.Reserved   = 0;         \
+    }
+
+    // clang-format off
+
+    // Default PAT Table
+    for (uint32_t i = 0; i < NumPATRegisters; i++)
+    {   //                      Index      CLOS       CachingPolicy
+        GMM_DEFINE_PAT_ELEMENT( i,          0              , L3_UC );
+    }
+
+    // Fixed PAT Table
+    // Group: CLOS0
+    //                      Index CLOS          CachingPolicy
+    GMM_DEFINE_PAT_ELEMENT( 0    , 0              , L3_UC )    // PATRegValue = 0x0
+     GMM_DEFINE_PAT_ELEMENT( 1    , 0              , L3_WC )    // PATRegValue = 0x1
+    GMM_DEFINE_PAT_ELEMENT( 2    , 0              , L3_WT )    // PATRegValue = 0x2
+    GMM_DEFINE_PAT_ELEMENT( 3    , 0              , L3_WB )    // PATRegValue = 0x3
+    //Group: CLOS1
+    GMM_DEFINE_PAT_ELEMENT( 4    , 1              , L3_WT )    // PATRegValue = 0x6
+    GMM_DEFINE_PAT_ELEMENT( 5    , 1              , L3_WB )    // PATRegValue = 0x7
+    //Group: CLOS2
+    GMM_DEFINE_PAT_ELEMENT( 6    , 2              , L3_WT )    // PATRegValue = 0xA
+    GMM_DEFINE_PAT_ELEMENT( 7    , 2              , L3_WB )    // PATRegValue = 0xB
+
+    CurrentMaxPATIndex = 7;
+
+// clang-format on
+#undef GMM_DEFINE_PAT_ELEMENT
+#undef L3_UC
+#undef L3_WC
+#undef L3_WT
+#undef L3_WB
+    return GMM_SUCCESS;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+///      A simple getter function returning the PAT (cache policy) for a given
+///      use Usage of the named resource pResInfo.
+///      Typically used to populate PPGTT/GGTT.
+///
+/// @param[in]     pResInfo: Resource info for resource, can be NULL.
+/// @param[in]     Usage: Current usage for resource.
+///
+/// @return        PATIndex
+/////////////////////////////////////////////////////////////////////////////////////
+uint32_t GMM_STDCALL GmmLib::GmmGen12dGPUCachePolicy::CachePolicyGetPATIndex(GMM_RESOURCE_INFO *pResInfo, GMM_RESOURCE_USAGE_TYPE Usage, bool *pCompressionEnable, bool IsCpuCacheable)
+{
+    __GMM_ASSERT(pGmmLibContext->GetCachePolicyElement(Usage).Initialized);
+    GMM_UNREFERENCED_PARAMETER(pCompressionEnable);
+    GMM_UNREFERENCED_PARAMETER(IsCpuCacheable);
+
+    // Prevent wrong Usage for XAdapter resources. UMD does not call GetMemoryObject on shader resources but,
+    // when they add it someone could call it without knowing the restriction.
+    if(pResInfo &&
+       pResInfo->GetResFlags().Info.XAdapter &&
+       Usage != GMM_RESOURCE_USAGE_XADAPTER_SHARED_RESOURCE)
+    {
+        __GMM_ASSERT(false);
+    }
+
+    return pGmmLibContext->GetCachePolicyElement(Usage).PATIndex;
 }

@@ -64,16 +64,16 @@ namespace GmmLib
             GMM_TEXTURE_INFO                    Surf;                       ///< Contains info about the surface being created
             GMM_TEXTURE_INFO                    AuxSurf;                    ///< Contains info about the auxiliary surface if using Unified Auxiliary surfaces.
             GMM_TEXTURE_INFO                    AuxSecSurf;                 ///< For multi-Aux surfaces, contains info about the secondary auxiliary surface
-            GMM_TEXTURE_INFO                    PlaneSurf[GMM_MAX_PLANE];   ///< Contains info for each plane for tiled Ys/Yf planar resources
 
             uint32_t                            RotateInfo;
             GMM_EXISTING_SYS_MEM                ExistingSysMem;     ///< Info about resources initialized with existing system memory
             GMM_GFX_ADDRESS                     SvmAddress;         ///< Driver managed SVM address
 
-            uint64_t                            pGmmLibContext;     ///< Pointer to GmmLib context passed in during Create()
+            uint64_t                            pGmmUmdLibContext;     ///< Pointer to GmmLib context created in DLL passed in during Create()
+            uint64_t                            pGmmKmdLibContext;     ///< Pointer to GmmLib context created in KMD passed in during Create()
             uint64_t                            pPrivateData;       ///< Allows clients to attach any private data to GmmResourceInfo
 #ifdef __GMM_KMD__
-            void                               *pClientContext;    ///< void * in oreder to of same size for the ResInfo Object across KMD and UMD
+            void                               *pClientContext;    ///< void * in order to of same size for the ResInfo Object across KMD and UMD
 #else
             GmmClientContext                   *pClientContext;    ///< ClientContext of the client creating this Resource
 #endif
@@ -87,19 +87,17 @@ namespace GmmLib
             GMM_VIRTUAL bool                IsPresentableformat();
             // Move GMM Restrictions to it's own class?
             virtual bool        CopyClientParams(GMM_RESCREATE_PARAMS &CreateParams);
-            GMM_VIRTUAL bool                RedescribePlanes();
-            GMM_VIRTUAL bool                ReAdjustPlaneProperties(bool IsAuxSurf);
             GMM_VIRTUAL const GMM_PLATFORM_INFO& GetPlatformInfo();
 
             /////////////////////////////////////////////////////////////////////////////////////
             /// Returns tile mode for SURFACE_STATE programming.
             /// @return     Tiled Mode
             /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE uint32_t GetTileModeSurfaceState(const GMM_TEXTURE_INFO *pTextureInfo) const
+            GMM_INLINE uint32_t GetTileModeSurfaceState(const GMM_TEXTURE_INFO *pTextureInfo)
             {
                 uint32_t TiledMode = 0;
 
-                if(GMM_IS_TILEY)
+                if(GMM_IS_TILEY(GetGmmLibContext()))
                 {
                     TiledMode =
                         pTextureInfo->Flags.Info.Linear ? 0 :
@@ -130,23 +128,15 @@ namespace GmmLib
                 Surf(),
                 AuxSurf(),
                 AuxSecSurf(),
-                PlaneSurf{},
                 RotateInfo(),
                 ExistingSysMem(),
                 SvmAddress(),
-                pGmmLibContext(),
+                pGmmUmdLibContext(),
+                pGmmKmdLibContext(),
                 pPrivateData(),
                 pClientContext(),
                 MultiTileArch()
             {
-#if (!defined(__GMM_KMD__) && !defined(GMM_UNIFIED_LIB))
-                // For clients, who derive classes from GMM class and call their derived class constructors
-                if (pGmmGlobalContext) // Client ULT does new on ResInfo without calling GmmInitGlobalContext.
-                {
-                    pClientContext = pGmmGlobalContext->pGmmGlobalClientContext;
-                    GET_GMM_CLIENT_TYPE(pClientContext, ClientType);
-                }
-#endif
             }
 
 #ifndef __GMM_KMD__
@@ -155,17 +145,17 @@ namespace GmmLib
                 Surf(),
                 AuxSurf(),
                 AuxSecSurf(),
-                PlaneSurf{},
                 RotateInfo(),
                 ExistingSysMem(),
                 SvmAddress(),
-                pGmmLibContext(),
+                pGmmUmdLibContext(),
+                pGmmKmdLibContext(),
                 pPrivateData(),
                 pClientContext(),
                 MultiTileArch()
             {
                 pClientContext = pClientContextIn;
-            }
+			}
 #endif
 
             GmmResourceInfoCommon& operator=(const GmmResourceInfoCommon& rhs)
@@ -178,7 +168,6 @@ namespace GmmLib
                 ExistingSysMem      = rhs.ExistingSysMem;
                 SvmAddress          = rhs.SvmAddress;
                 pPrivateData        = rhs.pPrivateData;
-                pGmmLibContext      = rhs.pGmmLibContext;
                 MultiTileArch       = rhs.MultiTileArch;
 
                 return *this;
@@ -212,14 +201,6 @@ namespace GmmLib
             GMM_VIRTUAL bool                    GMM_STDCALL IsMipRCCAligned(uint8_t &MisAlignedLod);
             GMM_VIRTUAL uint8_t                 GMM_STDCALL GetDisplayFastClearSupport();
             GMM_VIRTUAL uint8_t                 GMM_STDCALL GetDisplayCompressionSupport();
-            GMM_VIRTUAL uint32_t                GMM_STDCALL GetCompressionBlockWidth();
-            GMM_VIRTUAL uint32_t                GMM_STDCALL GetCompressionBlockHeight();
-            GMM_VIRTUAL uint32_t                GMM_STDCALL GetCompressionBlockDepth();
-            GMM_VIRTUAL uint8_t                 GMM_STDCALL IsArraySpacingSingleLod();
-            GMM_VIRTUAL uint8_t                 GMM_STDCALL IsASTC();
-            GMM_VIRTUAL MEMORY_OBJECT_CONTROL_STATE GMM_STDCALL GetMOCS();
-            GMM_VIRTUAL uint32_t                GMM_STDCALL GetStdTilingModeExtSurfaceState();
-            GMM_VIRTUAL GMM_SURFACESTATE_FORMAT GMM_STDCALL GetResourceFormatSurfaceState();
             GMM_VIRTUAL GMM_GFX_SIZE_T          GMM_STDCALL GetMipWidth(uint32_t MipLevel);
             GMM_VIRTUAL uint32_t                GMM_STDCALL GetMipHeight(uint32_t MipLevel);
             GMM_VIRTUAL uint32_t                GMM_STDCALL GetMipDepth(uint32_t MipLevel);
@@ -248,8 +229,53 @@ namespace GmmLib
                 pClientContext = pGmmClientContext;
                 GET_GMM_CLIENT_TYPE(pGmmClientContext, ClientType);
             }
+
 #endif
 
+
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// This function Sets GmmLibContext in GmmResInfo.
+            /// GMMResInfo gets passed as private data from UMDs to KMD during 
+            //  GMMCreateAllocation and GmmOpenAllocation
+            /// Member functions of ResInfo class need to access the LibContext object. But since
+            /// the LibContext object present in ResInfo is created by UMDs in UMD space,
+            /// and this UMD space object cant be used in KMD space, 
+            /// we need this API to set the KMD LibContext in ResInfo object.
+            /// @return ::void
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED void SetGmmLibContext(void *pLibContext)
+            {
+#if(defined(__GMM_KMD__))
+                pGmmKmdLibContext = reinterpret_cast<uint64_t>(pLibContext);
+#else
+                pGmmUmdLibContext = reinterpret_cast<uint64_t>(pLibContext);
+#endif
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns either UMD or KMD GMMLibContext that needs to be used when the ResInfo
+            /// Member functions are executed at KMD or UMD level
+            /// @return ::Context
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED Context *GetGmmLibContext()
+            {
+#if(defined(__GMM_KMD__))
+                return ((Context *)pGmmKmdLibContext);
+#else
+                return ((Context *)pGmmUmdLibContext);
+#endif
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns GMM_CLIENT Type that has created this resource
+            /// @return ::GMM_CLIENT
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED void SetClientType(GMM_CLIENT Client)
+            {
+                ClientType = Client;
+            }
+            
             /////////////////////////////////////////////////////////////////////////////////////
             /// Returns GMM_CLIENT Type that has created this resource
             /// @return ::GMM_CLIENT
@@ -261,7 +287,7 @@ namespace GmmLib
 
             /////////////////////////////////////////////////////////////////////////////////////
             /// Returns the system memory pointer. It selectively returns either the natural
-            /// pointer or a value appriopriately page aligned for D3DDI_ALLOCATIONINFO,
+            /// pointer or a value appropriately page aligned for D3DDI_ALLOCATIONINFO,
             /// depending on what the caller request.
             /// @param[in]      IsD3DDdiAllocation: Specifies where allocation was made by a D3D client
             /// @return         Pointer to system memory. NULL if not available.
@@ -332,6 +358,7 @@ namespace GmmLib
                 return Surf.BaseHeight;
             }
 
+
             /////////////////////////////////////////////////////////////////////////////////////
             /// Returns the resource depth
             /// @return     depth
@@ -394,9 +421,9 @@ namespace GmmLib
             {
                 const GMM_PLATFORM_INFO   *pPlatform;
 
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
-
-                if (Surf.Flags.Gpu.UnifiedAuxSurface)
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
+                
+		if (Surf.Flags.Gpu.UnifiedAuxSurface)
                 {
                     if (GMM_IS_PLANAR(Surf.Format))
                     {
@@ -430,8 +457,10 @@ namespace GmmLib
                 __GMM_ASSERT(GMM_IS_PLANAR(Surf.Format));
                 GMM_UNREFERENCED_LOCAL_VARIABLE(Plane);
 
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
-                __GMM_ASSERT(GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) >= IGFX_GEN8_CORE);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
+	       
+	        __GMM_ASSERT(GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) >= IGFX_GEN8_CORE);
+		GMM_UNREFERENCED_PARAMETER(pPlatform);
 
                 QPitch = static_cast<uint32_t>(Surf.OffsetInfo.Plane.ArrayQPitch / Surf.Pitch);
 
@@ -472,11 +501,11 @@ namespace GmmLib
                 TileMode = Surf.TileMode;
                 __GMM_ASSERT(TileMode < GMM_TILE_MODES);
 
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
                 if (pPlatform->TileInfo[TileMode].LogicalTileWidth != 0)
                 {
                     // In case of Depth/Stencil buffer MSAA TileYs surface, the LogicalTileWidth/Height is smaller than non-MSAA ones
-                    // Thus introducting the below variable to get the right PitchInTiles
+                    // Thus introducing the below variable to get the right PitchInTiles
                     uint32_t MSAASpecialFactorForDepthAndStencil = 1;
 
                     if ((Surf.Flags.Gpu.Depth || Surf.Flags.Gpu.SeparateStencil) &&
@@ -530,7 +559,7 @@ namespace GmmLib
 
                 __GMM_ASSERT(!AuxSurf.Flags.Info.Linear);
 
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&AuxSurf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&AuxSurf, GetGmmLibContext());
 
                 if (Surf.Flags.Gpu.UnifiedAuxSurface)
                 {
@@ -656,6 +685,7 @@ namespace GmmLib
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED void GMM_STDCALL SetMmcMode(GMM_RESOURCE_MMC_INFO Mode, uint32_t ArrayIndex)
             {
                 __GMM_ASSERT((Mode == GMM_MMC_DISABLED) || (Mode == GMM_MMC_HORIZONTAL) || (Mode == GMM_MMC_VERTICAL));
+                
                 __GMM_ASSERT(ArrayIndex < GMM_MAX_MMC_INDEX);
 
                 if (ArrayIndex < GMM_MAX_MMC_INDEX)
@@ -759,7 +789,7 @@ namespace GmmLib
                 __GMM_ASSERT(GMM_IS_PLANAR(Surf.Format));
 
                 if (Surf.Flags.Gpu.UnifiedAuxSurface  &&
-                    !((GmmClientContext*)pClientContext)->GetSkuTable().FtrFlatPhysCCS)
+                    !(GetGmmLibContext()->GetSkuTable().FtrFlatPhysCCS))
                 {
                     if (GmmAuxType == GMM_AUX_Y_CCS)
                     {
@@ -801,7 +831,8 @@ namespace GmmLib
             {
                 const __GMM_PLATFORM_RESOURCE   *pPlatformResource;
                 uint32_t HAlign;
-                pPlatformResource = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+
+                pPlatformResource = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
 
                 if ((GFX_GET_CURRENT_RENDERCORE(pPlatformResource->Platform) >= IGFX_GEN9_CORE) &&
                     !(Surf.Flags.Info.TiledYf || GMM_IS_64KB_TILE(Surf.Flags)))
@@ -824,7 +855,7 @@ namespace GmmLib
             {
                 const __GMM_PLATFORM_RESOURCE   *pPlatformResource;
                 uint32_t VAlign;
-                pPlatformResource = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatformResource = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
 
                 if ((GFX_GET_CURRENT_RENDERCORE(pPlatformResource->Platform) >= IGFX_GEN9_CORE) &&
                     !(GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags())))
@@ -960,6 +991,7 @@ namespace GmmLib
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T  GMM_STDCALL GetSize(GMM_SIZE_PARAM GmmSizeParam)
             {
                 GMM_GFX_SIZE_T Size = 0;
+
                 switch (GmmSizeParam)
                 {
                     case GMM_MAIN_SURF:
@@ -975,6 +1007,31 @@ namespace GmmLib
                             Size = GFX_ALIGN(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64));
                         }
                         break;
+                    case GMM_TOTAL_SURF_PHYSICAL:
+                        if(GMM_IS_PLANAR(Surf.Format) && Is1MBAlignedAuxTPlanarSurface())
+                        {
+                            Size = (Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_Y] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_U] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_V]) * Surf.OffsetInfo.PlaneXe_LPG.PhysicalPitch;
+                            Size *= GFX_MAX(Surf.ArraySize, 1);
+                            Size += AuxSurf.Size + AuxSecSurf.Size;
+                        }
+                        else
+                        {
+                            // Physical Size = VA Size
+                            Size = GetSize(GMM_TOTAL_SURF);
+                        }
+                        break;
+                    case GMM_MAIN_SURF_PHYSICAL:
+                        if(GMM_IS_PLANAR(Surf.Format) && Is1MBAlignedAuxTPlanarSurface())
+                        {
+                            Size = (Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_Y] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_U] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_V]) * Surf.OffsetInfo.PlaneXe_LPG.PhysicalPitch;
+                            Size *= GFX_MAX(Surf.ArraySize, 1);
+                        }
+                        else
+                        {
+                            // Physical Size = VA Size
+                            Size = GetSize(GMM_MAIN_SURF);
+                        }
+                        break;			
                     default:
                         __GMM_ASSERT(0);
                 }
@@ -989,8 +1046,8 @@ namespace GmmLib
             {
                 return Surf.Size;
             }
-
-            /////////////////////////////////////////////////////////////////////////////////////
+            
+	    /////////////////////////////////////////////////////////////////////////////////////
             /// Returns the number of bytes that are required to back this padded and aligned
             /// resource. The calculation takes into consideration more than simply width
             /// height and bits per pixel. Width padding (stride), pixel formats, inter-plane
@@ -999,8 +1056,8 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T  GMM_STDCALL GetSizeSurface()
             {
-                    GMM_OVERRIDE_SIZE_64KB_ALLOC;
-                    return (Surf.Size + AuxSurf.Size + AuxSecSurf.Size);
+                GMM_OVERRIDE_SIZE_64KB_ALLOC(GetGmmLibContext());
+                return (Surf.Size + AuxSurf.Size + AuxSecSurf.Size);
             }
 
             /////////////////////////////////////////////////////////////////////////////////////
@@ -1025,7 +1082,7 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t  GMM_STDCALL GetMaxGpuVirtualAddressBits()
             {
-                const GMM_PLATFORM_INFO *pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                const GMM_PLATFORM_INFO *pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
                 __GMM_ASSERTPTR(pPlatform, 0);
 
                 return pPlatform->MaxGpuVirtualAddressBitsPerResource;
@@ -1039,8 +1096,10 @@ namespace GmmLib
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T GMM_STDCALL GetUnifiedAuxSurfaceOffset(GMM_UNIFIED_AUX_TYPE GmmAuxType)
             {
                 GMM_GFX_SIZE_T Offset = 0;
-                const GMM_PLATFORM_INFO *pPlatform;
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+		const GMM_PLATFORM_INFO *pPlatform;
+		pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
+		GMM_UNREFERENCED_PARAMETER(pPlatform);
+
                 if (Surf.Flags.Gpu.UnifiedAuxSurface)
                 {
                     if ((GmmAuxType == GMM_AUX_CCS) || (GmmAuxType == GMM_AUX_SURF) || (GmmAuxType == GMM_AUX_Y_CCS)
@@ -1100,7 +1159,7 @@ namespace GmmLib
                     Offset = 0;
                 }
 
-                if(((GmmClientContext*)pClientContext)->GetSkuTable().FtrFlatPhysCCS && !Surf.Flags.Gpu.ProceduralTexture &&
+                if((GetGmmLibContext()->GetSkuTable().FtrFlatPhysCCS) && !Surf.Flags.Gpu.ProceduralTexture &&
                     (GmmAuxType == GMM_AUX_CCS || GmmAuxType == GMM_AUX_ZCS ||
                     GmmAuxType == GMM_AUX_Y_CCS || GmmAuxType == GMM_AUX_UV_CCS))
                 {
@@ -1124,7 +1183,7 @@ namespace GmmLib
                 else if (GmmAuxType == GMM_AUX_CCS || GmmAuxType == GMM_AUX_HIZ || GmmAuxType == GMM_AUX_MCS)
                 {
                     if(GmmAuxType == GMM_AUX_CCS &&
-                       ((GmmClientContext*)pClientContext)->GetSkuTable().FtrFlatPhysCCS && !Surf.Flags.Gpu.ProceduralTexture)
+                       GetGmmLibContext()->GetSkuTable().FtrFlatPhysCCS && !Surf.Flags.Gpu.ProceduralTexture)
                     {
                         return 0;
                     }
@@ -1341,17 +1400,17 @@ namespace GmmLib
                 uint32_t               HAlign = 0;
                 const GMM_PLATFORM_INFO   *pPlatform;
 
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
 
                 if (GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) >= IGFX_GEN8_CORE)
                 {
                     if (GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags()))
                     {
-                        HAlign = 1; //Ignored, but we'll retrun valid encoding nonetheless.
+                        HAlign = 1; // Ignored, but we'll return valid encoding nonetheless.
                     }
                     else
                     {
-                        if(GMM_IS_TILEY)
+                        if(GMM_IS_TILEY(GetGmmLibContext()))
                         {
                             switch (GetHAlign())
                             {
@@ -1403,13 +1462,13 @@ namespace GmmLib
                 uint32_t               VAlign;
                 const GMM_PLATFORM_INFO   *pPlatform;
 
-                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
 
                 if (GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) >= IGFX_GEN8_CORE)
                 {
                     if (GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags()))
                     {
-                        VAlign = 1; // Ignored , but we'll return valid encoding nonetheless.
+                        VAlign = 1; // Ignored, but we'll return valid encoding nonetheless.
                     }
                     else
                     {
@@ -1443,9 +1502,9 @@ namespace GmmLib
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetTileModeSurfaceState()
             {
                 return GetTileModeSurfaceState(&Surf);
-			}
+	    }
 			
-			/////////////////////////////////////////////////////////////////////////////////////
+	    /////////////////////////////////////////////////////////////////////////////////////
             /// Returns tile mode for AUX SURFACE_STATE programming.
             /// @return     Tiled Mode
             /////////////////////////////////////////////////////////////////////////////////////
@@ -1462,7 +1521,7 @@ namespace GmmLib
             {
                 uint32_t   TiledResourceMode = 0;
 
-                if(GMM_IS_TILEY)
+                if(GMM_IS_TILEY(GetGmmLibContext()))
                 {
                     if (Surf.Flags.Info.TiledYf)
                     {
@@ -1663,8 +1722,12 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED void GMM_STDCALL OverrideGmmLibContext(Context *pNewGmmLibContext)
             {
-                this->pGmmLibContext = reinterpret_cast<uint64_t>(pNewGmmLibContext);
-            }
+#if(defined(__GMM_KMD__))
+                this->pGmmKmdLibContext = reinterpret_cast<uint64_t>(pNewGmmLibContext);
+#else
+                this->pGmmUmdLibContext = reinterpret_cast<uint64_t>(pNewGmmLibContext);
+#endif
+             }
 
             /////////////////////////////////////////////////////////////////////////////////////
             /// Overrides the X offset of planar surface
@@ -1692,19 +1755,144 @@ namespace GmmLib
             protected:
                 GMM_VIRTUAL void UpdateUnAlignedParams();
             public:
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns the resource's compressions block width
+            /// @return    Compression block width
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetCompressionBlockWidth()
+            {
+                GMM_RESOURCE_FORMAT Format;
+                Format = Surf.Format;
+
+                __GMM_ASSERT((Format > GMM_FORMAT_INVALID) &&
+                             (Format < GMM_RESOURCE_FORMATS));
+
+                return GetGmmLibContext()->GetPlatformInfo().FormatTable[Format].Element.Width;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns the resource's compressions block height
+            /// @return    Compression block width
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetCompressionBlockHeight()
+            {
+                GMM_RESOURCE_FORMAT Format;
+                Format = Surf.Format;
+
+                __GMM_ASSERT((Format > GMM_FORMAT_INVALID) &&
+                             (Format < GMM_RESOURCE_FORMATS));
+
+                return GetGmmLibContext()->GetPlatformInfo().FormatTable[Format].Element.Height;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns the resource's compressions block depth
+            /// @return    Compression block width
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetCompressionBlockDepth()
+            {
+                GMM_RESOURCE_FORMAT Format;
+                Format = Surf.Format;
+
+                __GMM_ASSERT((Format > GMM_FORMAT_INVALID) &&
+                             (Format < GMM_RESOURCE_FORMATS));
+
+                return GetGmmLibContext()->GetPlatformInfo().FormatTable[Format].Element.Depth;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns whether resource uses LOD0-only or Full array spacing
+            /// @return     1/0
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint8_t GMM_STDCALL IsArraySpacingSingleLod()
+            {
+                __GMM_ASSERT(GFX_GET_CURRENT_RENDERCORE(GetGmmLibContext()->GetPlatformInfo().Platform) < IGFX_GEN8_CORE);
+                return Surf.Alignment.ArraySpacingSingleLod;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns whether resource is ASTC
+            /// @return     1/0
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint8_t GMM_STDCALL IsASTC()
+            {
+                GMM_RESOURCE_FORMAT Format;
+                Format = Surf.Format;
+
+                return (Format > GMM_FORMAT_INVALID) &&
+                       (Format < GMM_RESOURCE_FORMATS) &&
+                       GetGmmLibContext()->GetPlatformInfo().FormatTable[Format].ASTC;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns MOCS associated with the resource
+            /// @param[in]     MOCS
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED MEMORY_OBJECT_CONTROL_STATE GMM_STDCALL GetMOCS()
+            {
+                const GMM_CACHE_POLICY_ELEMENT *CachePolicy = GetGmmLibContext()->GetCachePolicyUsage();
+
+                __GMM_ASSERT(CachePolicy[GetCachePolicyUsage()].Initialized);
+
+                // Prevent wrong Usage for XAdapter resources. UMD does not call GetMemoryObject on shader resources but,
+                // when they add it someone could call it without knowing the restriction.
+                if(Surf.Flags.Info.XAdapter &&
+                   GetCachePolicyUsage() != GMM_RESOURCE_USAGE_XADAPTER_SHARED_RESOURCE)
+                {
+                    __GMM_ASSERT(false);
+                }
+
+                if((CachePolicy[GetCachePolicyUsage()].Override & CachePolicy[GetCachePolicyUsage()].IDCode) ||
+                   (CachePolicy[GetCachePolicyUsage()].Override == ALWAYS_OVERRIDE))
+                {
+                    return CachePolicy[GetCachePolicyUsage()].MemoryObjectOverride;
+                }
+
+                return CachePolicy[GetCachePolicyUsage()].MemoryObjectNoOverride;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns the surface state value for Standard Tiling Mode Extension
+            /// @return     Standard Tiling Mode Extension
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetStdTilingModeExtSurfaceState()
+            {
+                __GMM_ASSERT(GFX_GET_CURRENT_RENDERCORE(GetGmmLibContext()->GetPlatformInfo().Platform) > IGFX_GEN10_CORE);
+
+                if(GetGmmLibContext()->GetSkuTable().FtrStandardMipTailFormat)
+                {
+                    return 1;
+                }
+
+                return 0;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns the surface state value for Resource Format
+            /// @return     Resource Format
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_SURFACESTATE_FORMAT GMM_STDCALL GetResourceFormatSurfaceState()
+            {
+                GMM_RESOURCE_FORMAT Format;
+
+                Format = Surf.Format;
+                __GMM_ASSERT((Format > GMM_FORMAT_INVALID) && (Format < GMM_RESOURCE_FORMATS));
+
+                return GetGmmLibContext()->GetPlatformInfo().FormatTable[Format].SurfaceStateFormat;
+            }
 
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED const GMM_MULTI_TILE_ARCH& GetMultiTileArch()
             {
                 return MultiTileArch;
             }
-
-            /////////////////////////////////////////////////////////////////////////////////////
+	    
+	    /////////////////////////////////////////////////////////////////////////////////////
             /// Returns the Flat Phys CCS Size for the resource
             /// @return     CCS size in bytes
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T GMM_STDCALL GetFlatPhysCcsSize()
             {
-                if((((GmmClientContext*)pClientContext)->GetSkuTable().FtrFlatPhysCCS) &&
+                if((GetGmmLibContext()->GetSkuTable().FtrFlatPhysCCS) &&
                     !(Surf.Flags.Info.AllowVirtualPadding ||
                         Surf.Flags.Info.ExistingSysMem ||
                         Surf.Flags.Info.NonLocalOnly))
@@ -1724,7 +1912,7 @@ namespace GmmLib
             {
                 uint32_t TiledMode = 0;
 
-                if(GMM_IS_TILEY)
+                if(GMM_IS_TILEY(GetGmmLibContext()))
                 {
                     TiledMode =
 				Surf.Flags.Info.TiledYf ? 1 :
@@ -1757,6 +1945,67 @@ namespace GmmLib
                 }
 
                 return TiledMode;
+            }
+#ifndef __GMM_KMD__
+            GMM_VIRTUAL GMM_STATUS GMM_STDCALL CreateCustomRes_2(Context &GmmLibContext, GMM_RESCREATE_CUSTOM_PARAMS_2 &CreateParams);
+#endif
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns physical size of the main surface only. Aux surface size not included.
+            /// @return     Physical Size of main surface
+            /////////////////////////////////////////////////////////////////////////////////////	    
+	    GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T GMM_STDCALL GetSizeMainSurfacePhysical()
+            {
+                GMM_GFX_SIZE_T Size;
+                if(GMM_IS_PLANAR(Surf.Format) && Is1MBAlignedAuxTPlanarSurface())
+                {
+                    Size = ((Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_Y] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_U] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_V]) * Surf.OffsetInfo.PlaneXe_LPG.PhysicalPitch);
+                    Size *= GFX_MAX(Surf.ArraySize, 1);
+                }
+                else
+                {
+                    // Physical Size = VA Size
+                    Size = GetSizeMainSurface();
+                }
+                return Size;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns total physical size of surface.
+            /// @return     Surface Size
+            /////////////////////////////////////////////////////////////////////////////////////	    
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T GMM_STDCALL GetSizeSurfacePhysical()
+            {
+                GMM_GFX_SIZE_T Size;
+                if(GMM_IS_PLANAR(Surf.Format) && Is1MBAlignedAuxTPlanarSurface())
+                {
+                    Size = (Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_Y] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_U] + Surf.OffsetInfo.PlaneXe_LPG.Physical.Height[GMM_PLANE_V]) * Surf.OffsetInfo.PlaneXe_LPG.PhysicalPitch;
+                    Size *= GFX_MAX(Surf.ArraySize, 1);
+                    Size += AuxSurf.Size + AuxSecSurf.Size;
+                }
+                else
+                {
+                    // Physical Size = VA Size
+                    Size = GetSizeSurface();
+                };
+                return Size;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns if a resource is 1MB aligned AuxT enabled planar surface
+            /// @return              Is1MBAuxTAlignedPlanes Flag
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL Is1MBAlignedAuxTPlanarSurface()
+            {
+		const GMM_PLATFORM_INFO *pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf, GetGmmLibContext());
+		
+		if(GMM_IS_1MB_AUX_TILEALIGNEDPLANES(pPlatform->Platform, Surf))
+		{
+		    return Surf.OffsetInfo.PlaneXe_LPG.Is1MBAuxTAlignedPlanes;
+		}
+		
+		return 0;          
             }
 
     };

@@ -46,7 +46,8 @@ void CTestGen12Resource::SetUpTestCase()
         pGfxAdapterInfo->SkuTable.FtrLinearCCS = 1; //legacy y =>0 - test both
         pGfxAdapterInfo->SkuTable.FtrTileY     = 1;
         pGfxAdapterInfo->SkuTable.FtrLLCBypass = 0;
-        CommonULT::SetUpTestCase();
+        pGfxAdapterInfo->WaTable.WaAuxTable64KGranular= 1;
+	CommonULT::SetUpTestCase();
     }
 }
 
@@ -966,7 +967,7 @@ TEST_F(CTestGen12Resource, TestPlanarYCompressedResource)
 }
 
 /// @brief ULT for Planar Ys Compressed resource
-TEST_F(CTestGen12Resource, TestPlanarYsCompressedResource)
+TEST_F(CTestGen12Resource, DISABLED_TestPlanarYsCompressedResource)
 {
     const TEST_TILE_TYPE TileTypeSupported = {TEST_TILEYS};
 

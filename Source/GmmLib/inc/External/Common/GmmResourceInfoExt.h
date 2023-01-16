@@ -130,7 +130,6 @@ typedef struct GMM_RESOURCE_ALIGNMENT_REC
     uint32_t   PackedMipHeight;        // Packed Mip Height in # of 64KB Tiles (Pre-Gen9 / Undefined64KBSwizzle)
     uint32_t   QPitch;                 // Programmable QPitch (BDW+)
 }GMM_RESOURCE_ALIGNMENT;
-
 //===========================================================================
 // typedef:
 //        GMM_PAGETABLE_MGR
@@ -149,6 +148,15 @@ typedef struct GMM_RESOURCE_ALIGNMENT_REC
     typedef struct GmmPageTableMgr GMM_PAGETABLE_MGR;
 #endif
 
+#ifdef __cplusplus
+    namespace GmmLib
+    {
+        class Context;
+    } // namespace GmmLib
+    typedef GmmLib::Context GMM_LIB_CONTEXT;
+#else
+typedef struct GmmLibContext GMM_LIB_CONTEXT;
+#endif
 //===========================================================================
 // typedef:
 //        GMM_RESOURCE_INFO
@@ -178,7 +186,7 @@ typedef struct GMM_RESOURCE_ALIGNMENT_REC
 #endif
 
 //===========================================================================
-// TBD - Place holder for GMM_RESOURCE_FLAG definition.
+// Place holder for GMM_RESOURCE_FLAG definition.
 //---------------------------------------------------------------------------
 #include "GmmResourceFlags.h"
 #if defined __linux__
@@ -352,7 +360,28 @@ typedef struct GMM_RESCREATE_CUSTOM_PARAMS__REC
     }PlaneOffset;
 
     uint32_t NoOfPlanes;
+    uint32_t CpTag;
 }GMM_RESCREATE_CUSTOM_PARAMS;
+
+#ifndef __GMM_KMD__
+typedef struct GMM_RESCREATE_CUSTOM_PARAMS_2_REC : public GMM_RESCREATE_CUSTOM_PARAMS
+{
+    struct
+    {
+        uint32_t       Pitch;
+        GMM_GFX_SIZE_T Size;
+        uint32_t       BaseAlignment;
+        struct
+        {
+            uint32_t X[GMM_MAX_PLANE];
+            uint32_t Y[GMM_MAX_PLANE];
+        } PlaneOffset;
+    } AuxSurf;
+
+    uint64_t Reserved;
+    uint64_t Reserved1;
+}GMM_RESCREATE_CUSTOM_PARAMS_2;
+#endif
 
 //===========================================================================
 // enum :
@@ -443,8 +472,9 @@ typedef enum
     GMM_MAIN_PLUS_AUX_SURF,  // Main surface plus auxilary data, includes ccs, cc, zcs, mcs metadata. Renderable portion of the surface.
     GMM_TOTAL_SURF,          // Main+Aux with additional padding based on hardware PageSize.
     GMM_MAPGPUVA_SIZE = GMM_TOTAL_SURF,// To be used for mapping gpu virtual address space.
+    GMM_TOTAL_SURF_PHYSICAL,
+    GMM_MAIN_SURF_PHYSICAL,
 } GMM_SIZE_PARAM;
-
 
 //===========================================================================
 // typedef:
@@ -499,6 +529,8 @@ typedef enum
     GMM_MAPPING_NULL = 0,
     GMM_MAPPING_LEGACY_Y_TO_STDSWIZZLE_SHAPE,
     GMM_MAPPING_GEN9_YS_TO_STDSWIZZLE,
+    GMM_MAPPING_YUVPLANAR,
+    GMM_MAPPING_YUVPLANAR_AUX,
 } GMM_GET_MAPPING_TYPE;
 
 typedef struct GMM_GET_MAPPING_REC
@@ -510,7 +542,7 @@ typedef struct GMM_GET_MAPPING_REC
         GMM_GFX_SIZE_T      VirtualOffset;
         GMM_GFX_SIZE_T      PhysicalOffset;
         GMM_GFX_SIZE_T      Size;
-    }                   Span, __NextSpan;
+    } Span, __NextSpan;
 
     struct
     {
@@ -523,11 +555,9 @@ typedef struct GMM_GET_MAPPING_REC
             GMM_GFX_SIZE_T      Physical, Virtual;
         }                   Slice0MipOffset, SlicePitch;
         uint32_t               EffectiveLodMax, Lod, Row, RowPitchVirtual, Rows, Slice, Slices;
-        GMM_YUV_PLANE       Plane, LastPlane;
+        GMM_YUV_PLANE Plane, LastPlane;
     }                   Scratch; // Zero on initial call to GmmResGetMappingSpanDesc and then let persist.
 } GMM_GET_MAPPING;
-
-
 //***************************************************************************
 //
 //                      GMM_RESOURCE_INFO API
@@ -539,15 +569,15 @@ uint8_t             GMM_STDCALL GmmIsUVPacked(GMM_RESOURCE_FORMAT Format);
 bool                GMM_STDCALL GmmIsYUVFormatLCUAligned(GMM_RESOURCE_FORMAT Format);
 #define                         GmmIsYUVPlanar GmmIsPlanar // TODO(Benign): Support old name until we have a chance to correct in UMD(s) using this. No longer YUV since there are now RGB planar formats.
 uint8_t             GMM_STDCALL GmmIsReconstructableSurface(GMM_RESOURCE_FORMAT Format);
-uint8_t             GMM_STDCALL GmmIsCompressed(GMM_RESOURCE_FORMAT Format);
+uint8_t             GMM_STDCALL GmmIsCompressed(void *pLibContext, GMM_RESOURCE_FORMAT Format);
 uint8_t             GMM_STDCALL GmmIsYUVPacked(GMM_RESOURCE_FORMAT Format);
 uint8_t             GMM_STDCALL GmmIsRedecribedPlanes(GMM_RESOURCE_INFO *pGmmResource);
 uint8_t             GMM_STDCALL GmmResApplyExistingSysMem(GMM_RESOURCE_INFO *pGmmResource, void *pExistingSysMem, GMM_GFX_SIZE_T ExistingSysMemSize);
-uint8_t             GMM_STDCALL GmmIsStdTilingSupported(GMM_RESCREATE_PARAMS *pCreateParams);
+uint8_t             GMM_STDCALL GmmGetLosslessCompressionType(void *pLibContext, GMM_RESOURCE_FORMAT Format);
 GMM_RESOURCE_INFO*  GMM_STDCALL GmmResCopy(GMM_RESOURCE_INFO *pGmmResource);
 void                GMM_STDCALL GmmResMemcpy(void *pDst, void *pSrc);
 uint8_t             GMM_STDCALL GmmResCpuBlt(GMM_RESOURCE_INFO *pGmmResource, GMM_RES_COPY_BLT *pBlt);
-GMM_RESOURCE_INFO*  GMM_STDCALL GmmResCreate(GMM_RESCREATE_PARAMS *pCreateParams);
+GMM_RESOURCE_INFO   *GMM_STDCALL GmmResCreate(GMM_RESCREATE_PARAMS *pCreateParams, GMM_LIB_CONTEXT *pLibContext);
 void                GMM_STDCALL GmmResFree(GMM_RESOURCE_INFO *pGmmResource);
 GMM_GFX_SIZE_T      GMM_STDCALL GmmResGetSizeMainSurface(const GMM_RESOURCE_INFO *pResourceInfo);
 GMM_GFX_SIZE_T      GMM_STDCALL GmmResGetSizeSurface(GMM_RESOURCE_INFO *pResourceInfo);
@@ -606,7 +636,7 @@ uint32_t                GMM_STDCALL GmmResGetRotateInfo(GMM_RESOURCE_INFO *pGmmR
 GMM_MSAA_SAMPLE_PATTERN GMM_STDCALL GmmResGetSamplePattern(GMM_RESOURCE_INFO *pGmmResource);
 uint32_t                GMM_STDCALL GmmResGetSizeOfStruct(void);
 GMM_SURFACESTATE_FORMAT GMM_STDCALL GmmResGetSurfaceStateFormat(GMM_RESOURCE_INFO *pGmmResource);
-GMM_SURFACESTATE_FORMAT GMM_STDCALL GmmGetSurfaceStateFormat(GMM_RESOURCE_FORMAT Format);
+GMM_SURFACESTATE_FORMAT GMM_STDCALL GmmGetSurfaceStateFormat(GMM_RESOURCE_FORMAT Format,GMM_LIB_CONTEXT* pGmmLibContext);
 uint32_t               GMM_STDCALL GmmResGetSurfaceStateHAlign(GMM_RESOURCE_INFO *pGmmResource);
 uint32_t               GMM_STDCALL GmmResGetSurfaceStateVAlign(GMM_RESOURCE_INFO *pGmmResource);
 uint32_t               GMM_STDCALL GmmResGetSurfaceStateTiledResourceMode(GMM_RESOURCE_INFO *pGmmResource);
@@ -634,12 +664,13 @@ uint32_t               GMM_STDCALL GmmResTranslateColorSeparationX(GMM_RESOURCE_
 uint32_t               GMM_STDCALL GmmResGetColorSeparationArraySize(GMM_RESOURCE_INFO *pGmmResource);
 uint32_t               GMM_STDCALL GmmResGetColorSeparationPhysicalWidth(GMM_RESOURCE_INFO *pGmmResource);
 uint8_t                GMM_STDCALL GmmResGetSetHardwareProtection(GMM_RESOURCE_INFO *pGmmResource, uint8_t GetIsEncrypted, uint8_t SetIsEncrypted);
-uint32_t               GMM_STDCALL GmmResGetMaxGpuVirtualAddressBits(GMM_RESOURCE_INFO *pGmmResource);
+uint32_t               GMM_STDCALL GmmResGetMaxGpuVirtualAddressBits(GMM_RESOURCE_INFO *pGmmResource, GMM_LIB_CONTEXT* pGmmLibContext);
 uint8_t                GMM_STDCALL GmmIsSurfaceFaultable(GMM_RESOURCE_INFO *pGmmResource);
 uint32_t               GMM_STDCALL GmmResGetMaximumRenamingListLength(GMM_RESOURCE_INFO* pGmmResource);
 GMM_GFX_SIZE_T      GMM_STDCALL GmmResGetPlanarGetXOffset(GMM_RESOURCE_INFO *pGmmResource, GMM_YUV_PLANE Plane);
 GMM_GFX_SIZE_T      GMM_STDCALL GmmResGetPlanarGetYOffset(GMM_RESOURCE_INFO *pGmmResource, GMM_YUV_PLANE Plane);
 GMM_GFX_SIZE_T      GMM_STDCALL GmmResGetPlanarAuxOffset(GMM_RESOURCE_INFO *pGmmResource, uint32_t ArrayIndex, GMM_UNIFIED_AUX_TYPE Plane);
+void                GMM_STDCALL GmmResSetLibContext(GMM_RESOURCE_INFO *pGmmResource, void *pLibContext);
 
 // Remove when client moves to new interface
 uint32_t            GMM_STDCALL GmmResGetRenderSize(GMM_RESOURCE_INFO *pResourceInfo);
@@ -678,20 +709,23 @@ void                GMM_STDCALL GmmResOverrideAllocationMaxLod(GMM_RESOURCE_INFO
 //////////////////////////////////////////////////////////////////////////////////////
 // GmmCachePolicy.c
 //////////////////////////////////////////////////////////////////////////////////////
-MEMORY_OBJECT_CONTROL_STATE GMM_STDCALL GmmCachePolicyGetMemoryObject(GMM_RESOURCE_INFO *pResInfo ,
+MEMORY_OBJECT_CONTROL_STATE GMM_STDCALL GmmCachePolicyGetMemoryObject(void *pLibContext, 
+                                                                    GMM_RESOURCE_INFO *pResInfo,
                                                                     GMM_RESOURCE_USAGE_TYPE Usage);
-GMM_PTE_CACHE_CONTROL_BITS  GMM_STDCALL GmmCachePolicyGetPteType(GMM_RESOURCE_USAGE_TYPE Usage);
+GMM_PTE_CACHE_CONTROL_BITS GMM_STDCALL GmmCachePolicyGetPteType(void *pLibContext, GMM_RESOURCE_USAGE_TYPE Usage);
 GMM_RESOURCE_USAGE_TYPE     GMM_STDCALL GmmCachePolicyGetResourceUsage(GMM_RESOURCE_INFO *pResInfo );
-MEMORY_OBJECT_CONTROL_STATE GMM_STDCALL GmmCachePolicyGetOriginalMemoryObject(GMM_RESOURCE_INFO *pResInfo);
-uint8_t                     GMM_STDCALL GmmCachePolicyIsUsagePTECached(GMM_RESOURCE_USAGE_TYPE Usage);
+MEMORY_OBJECT_CONTROL_STATE GMM_STDCALL GmmCachePolicyGetOriginalMemoryObject(void *pLibContext, GMM_RESOURCE_INFO *pResInfo);
+uint8_t                     GMM_STDCALL GmmCachePolicyIsUsagePTECached(void *pLibContext, GMM_RESOURCE_USAGE_TYPE Usage);
+uint8_t                     GMM_STDCALL GmmGetSurfaceStateL1CachePolicy(void *pLibContext, GMM_RESOURCE_USAGE_TYPE Usage);
 void                        GMM_STDCALL GmmCachePolicyOverrideResourceUsage(GMM_RESOURCE_INFO *pResInfo, GMM_RESOURCE_USAGE_TYPE Usage);
-uint32_t                    GMM_STDCALL GmmCachePolicyGetMaxMocsIndex();
-uint32_t                    GMM_STDCALL GmmCachePolicyGetMaxL1HdcMocsIndex();
-uint32_t                    GMM_STDCALL GmmCachePolicyGetMaxSpecialMocsIndex();
+uint32_t                    GMM_STDCALL GmmCachePolicyGetMaxMocsIndex(void *pLibContext);
+uint32_t                    GMM_STDCALL GmmCachePolicyGetMaxL1HdcMocsIndex(void *pLibContext);
+uint32_t                    GMM_STDCALL GmmCachePolicyGetMaxSpecialMocsIndex(void *pLibContext);
 
 
 void                        GMM_STDCALL GmmResSetPrivateData(GMM_RESOURCE_INFO *pGmmResource, void *pPrivateData);
-
+uint32_t                    GMM_STDCALL GmmCachePolicyGetPATIndex(void *pLibContext, GMM_RESOURCE_USAGE_TYPE Usage, bool *pCompressionEnable, bool IsCpuCacheable);
+uint8_t                     GMM_STDCALL GmmGetSurfaceStateL2CachePolicy(void *pLibContext, GMM_RESOURCE_USAGE_TYPE Usage);
 #if (!defined(__GMM_KMD__) && !defined(GMM_UNIFIED_LIB))
 /////////////////////////////////////////////////////////////////////////////////////
 /// C wrapper functions for UMD clients Translation layer from OLD GMM APIs to New

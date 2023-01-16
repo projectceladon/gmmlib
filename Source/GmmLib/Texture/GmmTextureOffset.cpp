@@ -32,10 +32,12 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// @return     ::GMM_STATUS
 /////////////////////////////////////////////////////////////////////////////////////
 GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO *   pTexInfo,
-                                 GMM_REQ_OFFSET_INFO *pReqInfo)
+                                 GMM_REQ_OFFSET_INFO *pReqInfo,
+                                 GMM_LIB_CONTEXT *    pGmmLibContext)
 {
     GMM_STATUS        Status           = GMM_SUCCESS;
     bool              RestoreRenderReq = false;
+    bool              RestoreLockReq   = false;
     GMM_TEXTURE_CALC *pTextureCalc;
 
     GMM_DPF_ENTER;
@@ -43,7 +45,7 @@ GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO *   pTexInfo,
     __GMM_ASSERTPTR(pReqInfo, GMM_ERROR);
     __GMM_ASSERT(pReqInfo->CubeFace <= __GMM_NO_CUBE_MAP);
 
-    pTextureCalc = GMM_OVERRIDE_TEXTURE_CALC(pTexInfo);
+    pTextureCalc = GMM_OVERRIDE_TEXTURE_CALC(pTexInfo, pGmmLibContext);
 
     if((pReqInfo->Plane >= GMM_MAX_PLANE) ||
        (pReqInfo->Plane < GMM_NO_PLANE) ||
@@ -79,6 +81,12 @@ GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO *   pTexInfo,
     if(RestoreRenderReq == true)
         pReqInfo->ReqRender = 1;
 
+    if(pReqInfo->ReqLock)
+    {
+        pReqInfo->ReqLock = 0;
+        RestoreLockReq    = 1;
+    }
+
     if(pReqInfo->ReqRender)
     {
         if(pTextureCalc->GetTexRenderOffset(pTexInfo, pReqInfo) != GMM_SUCCESS)
@@ -87,7 +95,12 @@ GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO *   pTexInfo,
             Status = GMM_ERROR;
         }
     }
-
+    
+    if(RestoreLockReq)
+    {
+        pReqInfo->ReqLock = 1;
+    }
+    
     if(pReqInfo->ReqStdLayout)
     {
         if(pTextureCalc->GetTexStdLayoutOffset(pTexInfo, pReqInfo) != GMM_SUCCESS)
@@ -118,7 +131,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::GetTexStdLayoutOffset(GMM_TEXTURE_INFO *   pT
     bool     NeedSurfaceSize = false;
 
     __GMM_ASSERT(pTexInfo);
-    __GMM_ASSERT(pTexInfo->Flags.Info.TiledYs || pTexInfo->Flags.Info.TiledYf);
+    __GMM_ASSERT(GMM_IS_64KB_TILE(pTexInfo->Flags) || pTexInfo->Flags.Info.TiledYf);
     __GMM_ASSERT(
     (pTexInfo->Type == RESOURCE_2D) ||
     (pTexInfo->Type == RESOURCE_3D) ||
@@ -140,16 +153,17 @@ GMM_STATUS GmmLib::GmmTextureCalc::GetTexStdLayoutOffset(GMM_TEXTURE_INFO *   pT
     {
         uint32_t TileSize = 0;
 
-        if(pTexInfo->Flags.Info.TiledYs)
+        // TileYs (64) and TileYf (4)
+        if(GMM_IS_64KB_TILE(pTexInfo->Flags))
         {
             TileSize = GMM_KBYTE(64);
         }
-        else if(pTexInfo->Flags.Info.TiledYf)
+        else if(GMM_IS_4KB_TILE(pTexInfo->Flags))
         {
             TileSize = GMM_KBYTE(4);
         }
 
-        const GMM_PLATFORM_INFO *pPlatform       = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+        const GMM_PLATFORM_INFO *pPlatform       = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
         uint32_t                 BytesPerElement = pTexInfo->BitsPerPixel / CHAR_BIT;
         GMM_TILE_MODE            TileMode        = pTexInfo->TileMode;
         struct
@@ -271,7 +285,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::GetTexLockOffset(GMM_TEXTURE_INFO *   pTexInf
     __GMM_ASSERTPTR(pTexInfo, GMM_ERROR);
     __GMM_ASSERTPTR(pReqInfo, GMM_ERROR);
 
-    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
 
     // set default value
     AddressOffset = 0;
@@ -394,14 +408,14 @@ void GmmLib::GmmTextureCalc::AlignTexHeightWidth(GMM_TEXTURE_INFO *pTexInfo,
     __GMM_ASSERTPTR(pTexInfo, VOIDRETURN);
     __GMM_ASSERTPTR(pWidth, VOIDRETURN);
     __GMM_ASSERTPTR(pHeight, VOIDRETURN);
-    __GMM_ASSERTPTR(pGmmGlobalContext, VOIDRETURN);
+    __GMM_ASSERTPTR(pGmmLibContext, VOIDRETURN);
 
     MipWidth  = *pWidth;
     MipHeight = *pHeight;
 
     UnitAlignWidth  = pTexInfo->Alignment.HAlign;
     UnitAlignHeight = pTexInfo->Alignment.VAlign;
-    Compress        = GmmIsCompressed(pTexInfo->Format);
+    Compress        = GmmIsCompressed(pGmmLibContext, pTexInfo->Format);
 
     MipWidth  = GFX_MAX(MipWidth, UnitAlignWidth);
     MipHeight = GFX_MAX(MipHeight, UnitAlignHeight);
@@ -450,7 +464,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::GetTexRenderOffset(GMM_TEXTURE_INFO *   pTexI
     __GMM_ASSERTPTR(pTexInfo, GMM_ERROR);
     __GMM_ASSERTPTR(pReqInfo, GMM_ERROR);
 
-    pPlatform     = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    pPlatform     = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
     pTileInfo     = &pPlatform->TileInfo[pTexInfo->TileMode];
     AddressOffset = GetMipMapByteAddress(pTexInfo, pReqInfo);
 
@@ -601,7 +615,7 @@ GMM_GFX_SIZE_T GmmLib::GmmTextureCalc::GetMipMapByteAddress(GMM_TEXTURE_INFO *  
                   pTexInfo->OffsetInfo.Texture2DOffsetInfo.ArrayQPitchRender :
                   pTexInfo->OffsetInfo.Texture2DOffsetInfo.ArrayQPitchLock;
 
-    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
 
     if(pTexInfo->Type == RESOURCE_3D && !pTexInfo->Flags.Info.Linear)
     {
@@ -626,14 +640,15 @@ GMM_GFX_SIZE_T GmmLib::GmmTextureCalc::GetMipMapByteAddress(GMM_TEXTURE_INFO *  
         uint32_t OffsetY = 0;
         if(Plane < GMM_MAX_PLANE)
         {
-            OffsetX = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.X[Plane]);
-            OffsetY = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.Y[Plane]);
-        }
+            OffsetX     = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.X[Plane]);
+            OffsetY     = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.Y[Plane]);
+            ArrayQPitch = pTexInfo->OffsetInfo.Plane.ArrayQPitch;
+	}
         MipMapByteAddress = (OffsetY * Pitch) + OffsetX;
 
         __GMM_ASSERT(!pReqInfo->ArrayIndex || (pReqInfo->ArrayIndex < pTexInfo->ArraySize));
 
-        MipMapByteAddress += (pTexInfo->OffsetInfo.Plane.ArrayQPitch * pReqInfo->ArrayIndex);
+        MipMapByteAddress += (ArrayQPitch * pReqInfo->ArrayIndex);
     }
     else
     {
@@ -720,7 +735,7 @@ GMM_GFX_SIZE_T GmmLib::GmmTextureCalc::Get3DMipByteAddress(GMM_TEXTURE_INFO *   
     GMM_RESOURCE_FORMAT GenericFormat;
     uint32_t            CompressHeight, CompressWidth, CompressDepth;
 
-    __GMM_ASSERTPTR(pGmmGlobalContext, 0);
+    __GMM_ASSERTPTR(pGmmLibContext, 0);
 
     GenericFormat = pTexInfo->Format;
     Slice         = pReqInfo->Slice;
@@ -751,7 +766,7 @@ GMM_GFX_SIZE_T GmmLib::GmmTextureCalc::Get3DMipByteAddress(GMM_TEXTURE_INFO *   
 
         UnitAlignWidth  = pTexInfo->Alignment.HAlign;
         UnitAlignHeight = pTexInfo->Alignment.VAlign;
-        Compress        = GmmIsCompressed(pTexInfo->Format);
+        Compress        = GmmIsCompressed(pGmmLibContext, pTexInfo->Format);
         GetCompressionBlockDimensions(pTexInfo->Format, &CompressWidth, &CompressHeight, &CompressDepth);
 
         // clamp such that mip height is at least min height
@@ -822,4 +837,149 @@ uint32_t GmmLib::GmmTextureCalc::GetDisplayFrameOffset(GMM_TEXTURE_INFO *   pTex
     }
 
     return Offset;
+}
+
+void GmmLib::GmmTextureCalc::SetPlanarOffsetInfo(GMM_TEXTURE_INFO *pTexInfo, GMM_RESCREATE_CUSTOM_PARAMS &CreateParams)
+{
+    const GMM_PLATFORM_INFO *pPlatform;
+    pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
+
+    if(GMM_IS_TILED(pPlatform->TileInfo[pTexInfo->TileMode]))
+    {
+        pTexInfo->OffsetInfo.Plane.IsTileAlignedPlanes = true;
+    }
+    for(uint8_t i = 1; i <= CreateParams.NoOfPlanes; i++)
+    {
+        pTexInfo->OffsetInfo.Plane.X[i] = CreateParams.PlaneOffset.X[i];
+        pTexInfo->OffsetInfo.Plane.Y[i] = CreateParams.PlaneOffset.Y[i];
+    }
+    pTexInfo->OffsetInfo.Plane.NoOfPlanes = CreateParams.NoOfPlanes;
+}
+
+#ifndef __GMM_KMD__
+void GmmLib::GmmTextureCalc::SetPlanarOffsetInfo_2(GMM_TEXTURE_INFO *pTexInfo, GMM_RESCREATE_CUSTOM_PARAMS_2 &CreateParams)
+{
+    const GMM_PLATFORM_INFO *pPlatform;
+    pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
+
+    if(GMM_IS_TILED(pPlatform->TileInfo[pTexInfo->TileMode]))
+    {
+        pTexInfo->OffsetInfo.Plane.IsTileAlignedPlanes = true;
+    }
+    for(uint8_t i = 1; i <= CreateParams.NoOfPlanes; i++)
+    {
+        pTexInfo->OffsetInfo.Plane.X[i] = CreateParams.PlaneOffset.X[i];
+        pTexInfo->OffsetInfo.Plane.Y[i] = CreateParams.PlaneOffset.Y[i];
+    }
+    pTexInfo->OffsetInfo.Plane.NoOfPlanes = CreateParams.NoOfPlanes;
+}
+#endif
+
+void GmmLib::GmmTextureCalc::SetPlaneUnAlignedTexOffsetInfo(GMM_TEXTURE_INFO *pTexInfo, uint32_t YHeight, uint32_t VHeight)
+{
+    uint32_t UmdUHeight = 0, UmdVHeight = 0;
+
+    pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_Y] = YHeight;
+    if(pTexInfo->OffsetInfo.Plane.NoOfPlanes == 2)
+    {
+        pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U] = VHeight;
+        UmdUHeight                                               = (GMM_GLOBAL_GFX_SIZE_T)((pTexInfo->Size / pTexInfo->Pitch) - pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U]);
+    }
+    else if(pTexInfo->OffsetInfo.Plane.NoOfPlanes == 3)
+    {
+        pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U] =
+        pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_V] = VHeight;
+        UmdUHeight                                               = (GMM_GLOBAL_GFX_SIZE_T)(pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_V] - pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U]);
+        UmdVHeight                                               = (GMM_GLOBAL_GFX_SIZE_T)(((pTexInfo->Size / pTexInfo->Pitch) - pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U]) / 2);
+        __GMM_ASSERTPTR((UmdUHeight == UmdVHeight), VOIDRETURN);
+    }
+
+    __GMM_ASSERTPTR(((pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U] == YHeight) && (UmdUHeight == VHeight)), VOIDRETURN);
+}
+
+uint32_t GmmLib::GmmTextureCalc::IsTileAlignedPlanes(GMM_TEXTURE_INFO *pTexInfo)
+{
+    return pTexInfo->OffsetInfo.Plane.IsTileAlignedPlanes;
+}
+
+uint32_t GmmLib::GmmTextureCalc::GetNumberOfPlanes(GMM_TEXTURE_INFO *pTexInfo)
+{
+    return pTexInfo->OffsetInfo.Plane.NoOfPlanes;
+}
+
+void GmmLib::GmmTextureCalc::GetPlaneIdForCpuBlt(GMM_TEXTURE_INFO *pTexInfo, GMM_RES_COPY_BLT *pBlt, uint32_t *PlaneId)
+{
+    uint32_t TotalHeight = 0;
+
+    if(pTexInfo->OffsetInfo.Plane.NoOfPlanes == 2)
+    {
+        TotalHeight = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_Y] +
+                                     pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U]);
+    }
+    else if(pTexInfo->OffsetInfo.Plane.NoOfPlanes == 3)
+    {
+        TotalHeight = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_Y] +
+                                     pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U] +
+                                     pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_V]);
+    }
+    else
+    {
+        TotalHeight = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_Y]); //YV12 exception
+    }
+
+    // Determine if BLT rectange is for monolithic surface or contained in specific Y/UV plane
+    if(((pBlt->Gpu.OffsetY + pBlt->Blt.Height <= pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U]) || pTexInfo->OffsetInfo.Plane.NoOfPlanes == 1) &&
+       (pBlt->Gpu.OffsetX + pBlt->Blt.Width <= pTexInfo->BaseWidth))
+    {
+        *PlaneId = GMM_PLANE_Y;
+    }
+    else if(pBlt->Gpu.OffsetY >= pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U] &&
+            (pBlt->Gpu.OffsetY + pBlt->Blt.Height <= (pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U] + pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U])) &&
+            (pBlt->Gpu.OffsetX + pBlt->Blt.Width <= pTexInfo->BaseWidth))
+    {
+        *PlaneId = GMM_PLANE_U;
+    }
+    else if(pBlt->Gpu.OffsetY >= pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_V] &&
+            (pBlt->Gpu.OffsetY + pBlt->Blt.Height <= (pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_V] + pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U])) &&
+            (pBlt->Gpu.OffsetX + pBlt->Blt.Width <= pTexInfo->BaseWidth))
+    {
+        *PlaneId = GMM_PLANE_V;
+    }
+
+    // For smaller surface, BLT rect may fall in Y Plane due to tile alignment but user may have requested monolithic BLT
+    if(pBlt->Gpu.OffsetX == 0 &&
+       pBlt->Gpu.OffsetY == 0 &&
+       pBlt->Blt.Height >= TotalHeight)
+    {
+        *PlaneId = GMM_MAX_PLANE;
+    }
+}
+
+void GmmLib::GmmTextureCalc::GetBltInfoPerPlane(GMM_TEXTURE_INFO *pTexInfo, GMM_RES_COPY_BLT *pBlt, uint32_t PlaneId)
+{
+    if(PlaneId == GMM_PLANE_Y)
+    {
+        pBlt->Gpu.OffsetX = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.X[GMM_PLANE_Y]);
+        pBlt->Gpu.OffsetY = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_Y]);
+        pBlt->Blt.Height  = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_Y]);
+    }
+    else if(PlaneId == GMM_PLANE_U)
+    {
+        pBlt->Gpu.OffsetX = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.X[GMM_PLANE_U]);
+        pBlt->Gpu.OffsetY = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_U]);
+
+        pBlt->Sys.pData  = (char *)pBlt->Sys.pData + uint32_t(pBlt->Blt.Height * pBlt->Sys.RowPitch);
+        pBlt->Blt.Height = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U]);
+        if(pTexInfo->Flags.Info.RedecribedPlanes)
+        {
+            __GMM_ASSERT(0);
+        }
+    }
+    else
+    {
+        pBlt->Gpu.OffsetX = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.X[GMM_PLANE_V]);
+        pBlt->Gpu.OffsetY = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.Y[GMM_PLANE_V]);
+        pBlt->Blt.Height  = GFX_ULONG_CAST(pTexInfo->OffsetInfo.Plane.UnAligned.Height[GMM_PLANE_U]);
+        pBlt->Sys.pData   = (char *)pBlt->Sys.pData + uint32_t(pBlt->Blt.Height * pBlt->Sys.RowPitch);
+    }
 }

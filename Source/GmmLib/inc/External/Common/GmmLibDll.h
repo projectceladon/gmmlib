@@ -68,7 +68,6 @@ extern "C" {
 /////////////////////////////////////////////////////////////////////////////////////
 /// Only function exported from GMM lib DLL.
 /////////////////////////////////////////////////////////////////////////////////////
-    GMM_LIB_API GMM_STATUS GMM_STDCALL OpenGmm(GmmExportEntries *pm_GmmFuncs);
     GMM_LIB_API GMM_STATUS GMM_STDCALL InitializeGmm(GMM_INIT_IN_ARGS *pInArgs, GMM_INIT_OUT_ARGS *pOutArgs);
     GMM_LIB_API void GMM_STDCALL GmmAdapterDestroy(GMM_INIT_OUT_ARGS *pInArgs);
 
@@ -76,6 +75,6 @@ extern "C" {
 }
 #endif
 
-#ifdef _WIN32
-typedef GMM_STATUS (APIENTRY *pfnGmmEntry)(GmmExportEntries *);
-#endif
+typedef GMM_STATUS (GMM_STDCALL *pfnGmmEntry)(GmmExportEntries *);
+typedef GMM_STATUS (GMM_STDCALL *pfnGmmInit)(GMM_INIT_IN_ARGS *, GMM_INIT_OUT_ARGS *);
+typedef void (GMM_STDCALL *pfnGmmDestroy)(GMM_INIT_OUT_ARGS *);

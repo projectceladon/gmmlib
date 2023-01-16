@@ -75,19 +75,23 @@ namespace GmmLib
     /// Windows implementation.  This class members will hold data that
     /// are specific to each client.
     /////////////////////////////////////////////////////////////////////////
+    class Context;
     class GMM_LIB_API NON_PAGED_SECTION GmmClientContext : public GmmMemAllocator
     {
     protected:
         GMM_CLIENT                       ClientType;
-        ///< Placeholders for storing UMD context. Actual UMD context that needs to be stored here is TBD
+        ///< Placeholders for storing UMD context. Actual UMD context that needs to be stored here is 
         void                             *pUmdAdapter;
         GMM_UMD_CONTEXT                  *pGmmUmdContext;
         GMM_DEVICE_CALLBACKS_INT          DeviceCB;       //OS-specific defn: Will be used by Clients to send as input arguments.
         // Flag to indicate Device_callbacks received.
         uint8_t             IsDeviceCbReceived;
+        Context *pGmmLibContext;
+
     public:
         /* Constructor */
         GmmClientContext(GMM_CLIENT ClientType);
+        GmmClientContext(GMM_CLIENT ClientType, Context* pLibContext);
 
         /* Virtual destructor */
         virtual ~GmmClientContext();
@@ -102,13 +106,19 @@ namespace GmmLib
             return (ClientType);
         }
 
+	GMM_INLINE_VIRTUAL GMM_LIB_CONTEXT *GetLibContext()
+        {
+            return pGmmLibContext;
+        }
+
         /* Function prototypes */
         /* CachePolicy Related Exported Functions from GMM Lib */
         GMM_VIRTUAL MEMORY_OBJECT_CONTROL_STATE         GMM_STDCALL CachePolicyGetMemoryObject(GMM_RESOURCE_INFO *pResInfo, GMM_RESOURCE_USAGE_TYPE Usage);
         GMM_VIRTUAL GMM_PTE_CACHE_CONTROL_BITS          GMM_STDCALL CachePolicyGetPteType(GMM_RESOURCE_USAGE_TYPE Usage);
         GMM_VIRTUAL MEMORY_OBJECT_CONTROL_STATE         GMM_STDCALL CachePolicyGetOriginalMemoryObject(GMM_RESOURCE_INFO *pResInfo);
         GMM_VIRTUAL uint8_t                             GMM_STDCALL CachePolicyIsUsagePTECached(GMM_RESOURCE_USAGE_TYPE Usage);
-        GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxMocsIndex();
+        GMM_VIRTUAL uint8_t                             GMM_STDCALL GetSurfaceStateL1CachePolicy(GMM_RESOURCE_USAGE_TYPE Usage);
+	GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxMocsIndex();
         GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxL1HdcMocsIndex();
         GMM_VIRTUAL uint32_t                            GMM_STDCALL CachePolicyGetMaxSpecialMocsIndex();
         GMM_VIRTUAL GMM_CACHE_POLICY_ELEMENT*           GMM_STDCALL GetCachePolicyUsage();
@@ -161,6 +171,11 @@ namespace GmmLib
                                                         GmmClientAllocationCallbacks* pAllocCbs);
         GMM_VIRTUAL GMM_STATUS GMM_STDCALL              GmmSetDeviceInfo(GMM_DEVICE_INFO* DeviceInfo);
         GMM_VIRTUAL GMM_RESOURCE_INFO* GMM_STDCALL      CreateCustomResInfoObject(GMM_RESCREATE_CUSTOM_PARAMS* pCreateParams);
+
+#ifndef __GMM_KMD__
+        GMM_VIRTUAL GMM_RESOURCE_INFO *GMM_STDCALL      CreateCustomResInfoObject_2(GMM_RESCREATE_CUSTOM_PARAMS_2 *pCreateParams);
+#endif
+	GMM_VIRTUAL uint32_t GMM_STDCALL CachePolicyGetPATIndex(GMM_RESOURCE_INFO *pResInfo, GMM_RESOURCE_USAGE_TYPE Usage, bool *pCompressionEnable, bool IsCpuCacheable);
     };
 }
 
@@ -179,23 +194,30 @@ extern "C" {
 #endif
 
     /* ClientContext will be unique to each client */
-    GMM_CLIENT_CONTEXT* GMM_STDCALL GmmCreateClientContext(GMM_CLIENT ClientType);
+    GMM_CLIENT_CONTEXT* GMM_STDCALL GmmCreateClientContextForAdapter(GMM_CLIENT ClientType, ADAPTER_BDF sBdf);
     void GMM_STDCALL GmmDeleteClientContext(GMM_CLIENT_CONTEXT *pGmmClientContext);
 
 #if GMM_LIB_DLL
 #ifdef _WIN32
-    GMM_STATUS GMM_STDCALL GmmCreateSingletonContext(const PLATFORM Platform,
-                                                    const SKU_FEATURE_TABLE* pSkuTable,
-                                                    const WA_TABLE* pWaTable,
-                                                    const GT_SYSTEM_INFO* pGtSysInfo);
+
+    GMM_STATUS GMM_STDCALL GmmCreateLibContext(const PLATFORM           Platform,
+                                               const SKU_FEATURE_TABLE *pSkuTable,
+                                               const WA_TABLE *         pWaTable,
+                                               const GT_SYSTEM_INFO *   pGtSysInfo,
+                                               ADAPTER_BDF              sBdf);
 #else
-    GMM_STATUS GMM_STDCALL GmmCreateSingletonContext(const PLATFORM Platform,
-                                                    const void* pSkuTable,
-                                                    const void* pWaTable,
-                                                    const void* pGtSysInfo);
+
+    GMM_STATUS GMM_STDCALL GmmCreateLibContext(const PLATFORM Platform,
+                                               const void *   pSkuTable,
+                                               const void *   pWaTable,
+                                               const void *   pGtSysInfo,
+                                               ADAPTER_BDF    sBdf);
 #endif
 
-    void GMM_STDCALL GmmDestroySingletonContext(void);
+    void GMM_STDCALL GmmLibContextFree(ADAPTER_BDF sBdf);
+    GMM_LIB_API_CONSTRUCTOR void GmmCreateMultiAdapterContext();
+    GMM_LIB_API_DESTRUCTOR void GmmDestroyMultiAdapterContext();
+
 #endif //GMM_LIB_DLL
 
 #ifdef __cplusplus

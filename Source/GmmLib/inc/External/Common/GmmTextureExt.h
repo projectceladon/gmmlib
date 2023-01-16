@@ -41,16 +41,38 @@ extern "C" {
 //---------------------------------------------------------------------------
 typedef struct GMM_PLANAR_OFFSET_INFO_REC
 {
-    GMM_GFX_SIZE_T     ArrayQPitch;
-    GMM_GFX_SIZE_T     X[GMM_MAX_PLANE];
-    GMM_GFX_SIZE_T     Y[GMM_MAX_PLANE];
+    GMM_GFX_SIZE_T   ArrayQPitch;
+    GMM_GFX_SIZE_T   X[GMM_MAX_PLANE];
+    GMM_GFX_SIZE_T   Y[GMM_MAX_PLANE];
     struct
     {
-        GMM_GFX_SIZE_T     Height[GMM_MAX_PLANE];
+        GMM_GFX_SIZE_T   Height[GMM_MAX_PLANE];
     } UnAligned, Aligned;
     uint32_t            NoOfPlanes;
     bool                IsTileAlignedPlanes;
 }GMM_PLANAR_OFFSET_INFO;
+
+//===========================================================================
+// typedef:
+//        GMM_PLANAR_OFFSET_INFO
+//
+// Description:
+//     This structure stores the offset address of each level
+//---------------------------------------------------------------------------
+typedef struct GMM_PLANAR_OFFSET_INFO_V2_REC
+{
+    GMM_GFX_SIZE_T ArrayQPitch;
+    GMM_GFX_SIZE_T X[GMM_MAX_PLANE];
+    GMM_GFX_SIZE_T Y[GMM_MAX_PLANE];
+    struct
+    {
+        uint32_t Height[GMM_MAX_PLANE];
+    } UnAligned, Aligned, Physical;
+    uint32_t                      NoOfPlanes;
+    bool                          IsTileAlignedPlanes;
+    bool                          Is1MBAuxTAlignedPlanes;
+    GMM_GFX_SIZE_T PhysicalPitch;
+} GMM_PLANAR_OFFSET_INFO_V2;
 
 //===========================================================================
 // typedef:
@@ -93,6 +115,7 @@ typedef struct GMM_OFFSET_INFO_REC
         GMM_3D_TEXTURE_OFFSET_INFO_T    Texture3DOffsetInfo;
         GMM_2D_TEXTURE_OFFSET_INFO_T    Texture2DOffsetInfo;
         GMM_PLANAR_OFFSET_INFO          Plane;
+        GMM_PLANAR_OFFSET_INFO_V2       PlaneXe_LPG;	
     };
 }GMM_OFFSET_INFO, GMM_OFFSET_INFO_T;
 
@@ -187,6 +210,7 @@ typedef struct GMM_TEXTURE_INFO_REC
         uint8_t          IsGmmAllocated;
         uint8_t          IsPageAligned;
     }                   ExistingSysMem;
+
 }GMM_TEXTURE_INFO;
 
 //***************************************************************************
@@ -195,10 +219,10 @@ typedef struct GMM_TEXTURE_INFO_REC
 //
 //***************************************************************************
 #if(defined(__GMM_KMD__))
-GMM_STATUS GmmTexAlloc(GMM_TEXTURE_INFO* pTexInfo);
-GMM_STATUS GmmTexLinearCCS(GMM_TEXTURE_INFO* pTexInfo, GMM_TEXTURE_INFO *pAuxTexInfo);
+GMM_STATUS GmmTexAlloc(GMM_LIB_CONTEXT *pGmmLibContext, GMM_TEXTURE_INFO* pTexInfo);
+GMM_STATUS GmmTexLinearCCS(GMM_LIB_CONTEXT *pGmmLibContext, GMM_TEXTURE_INFO* pTexInfo, GMM_TEXTURE_INFO *pAuxTexInfo);
 #endif
-GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO* pTexInfo, GMM_REQ_OFFSET_INFO* pReqInfo);
+GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO* pTexInfo, GMM_REQ_OFFSET_INFO* pReqInfo , GMM_LIB_CONTEXT* pGmmLibContext);
 
 #define GMM_ISNOT_TILED(TileInfo) ((TileInfo).LogicalSize == 0)
 #define GMM_IS_TILED(TileInfo)    ((TileInfo).LogicalSize > 0)
@@ -214,11 +238,10 @@ GMM_STATUS GmmTexGetMipMapOffset(GMM_TEXTURE_INFO* pTexInfo, GMM_REQ_OFFSET_INFO
 #define GMM_IS_64KB_TILE(Flags) (Flags.Info.TiledYs || Flags.Info.Tile64)
 #define GMM_IS_SUPPORTED_BPP_ON_TILE_64_YF_YS(bpp) ((bpp == 8) || (bpp == 16) || (bpp == 32) || (bpp == 64) || (bpp == 128))
 
-#define GMM_SET_4KB_TILE(Flags, Value) if (pGmmGlobalContext->GetSkuTable().FtrTileY) ((Flags).Info.TiledY = (Value)); else ((Flags).Info.Tile4 = (Value))
-#define GMM_SET_64KB_TILE(Flags, Value) if (pGmmGlobalContext->GetSkuTable().FtrTileY) ((Flags).Info.TiledYs = (Value)); else ((Flags).Info.Tile64 = (Value))
-#define GMM_SET_4KB_TILE_MODE(TileMode) if (pGmmGlobalContext->GetSkuTable().FtrTileY) (TileMode = LEGACY_TILE_Y); else (TileMode = TILE4)
-#define GMM_IS_TILEY (pClientContext->GetSkuTable().FtrTileY)
-
+#define GMM_SET_4KB_TILE(Flags, Value,pGmmLibContext) if (pGmmLibContext->GetSkuTable().FtrTileY) ((Flags).Info.TiledY = (Value)); else ((Flags).Info.Tile4 = (Value))
+#define GMM_SET_64KB_TILE(Flags, Value,pGmmLibContext) if (pGmmLibContext->GetSkuTable().FtrTileY) ((Flags).Info.TiledYs = (Value)); else ((Flags).Info.Tile64 = (Value))
+#define GMM_SET_4KB_TILE_MODE(TileMode,pGmmLibContext) if (pGmmLibContext->GetSkuTable().FtrTileY) (TileMode = LEGACY_TILE_Y); else (TileMode = TILE4)
+#define GMM_IS_TILEY(pGmmLibContext) (((GmmClientContext*)pClientContext)->GetSkuTable().FtrTileY)
 
 // Reset packing alignment to project default
 #pragma pack(pop)

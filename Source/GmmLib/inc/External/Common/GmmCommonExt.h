@@ -33,6 +33,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 #define GMM_INLINE_EXPORTED                                            /* Macro To avoid inlining of exported member functions in Clients code in DLL mode*/
 
+#define GMM_LIB_DLL_MA                  1               // Macro to indicate whether GMM Lib DLL is Multi-Adapter capable. Todo: Make this a build macro
+
 #ifdef _WIN32
 
     #ifdef GMM_LIB_DLL_EXPORTS
@@ -41,12 +43,19 @@ OTHER DEALINGS IN THE SOFTWARE.
         #define GMM_LIB_API                     __declspec(dllimport)       /* Macro to define GMM Lib DLL imports */
     #endif  /* GMM_LIB_DLL_EXPORTS */
 
+#define GMM_LIB_API_CONSTRUCTOR
+#define GMM_LIB_API_DESTRUCTOR
+
 #else // Linux
     #ifdef GMM_LIB_DLL_EXPORTS
         #define GMM_LIB_API                     __attribute__ ((visibility ("default")))
     #else
         #define GMM_LIB_API
     #endif
+
+#define GMM_LIB_API_CONSTRUCTOR             __attribute__((constructor))
+#define GMM_LIB_API_DESTRUCTOR              __attribute__((destructor))
+
 #endif
 
 #else // !GMM_LIB_DLL
@@ -68,7 +77,11 @@ extern const SWIZZLE_DESCRIPTOR INTEL_64KB_UNDEFINED_64_128bpp;
 // Set packing alignment
 #pragma pack(push, 8)
 
+#if defined(__ARM_ARCH)
+#define GMM_STDCALL            // GMM function calling convention
+#else
 #define GMM_STDCALL             __stdcall   // GMM function calling convention
+#endif
 #define GMM_NO_FENCE_REG        0xDEADBEEF
 #define GMM_MAX_DISPLAYS        3
 
@@ -113,13 +126,43 @@ typedef uint32_t GMM_GLOBAL_GFX_ADDRESS, GMM_GLOBAL_GFX_SIZE_T;
     #define GMM_GLOBAL_GFX_SIZE_T_CAST(x)   ((GMM_GLOBAL_GFX_SIZE_T)(x))
 #endif
 
-
 #define GMM_GFX_ADDRESS_CANONIZE(a)     (((int64_t)(a) << (64 - 48)) >> (64 - 48)) // TODO(Minor): When GMM adds platform-dependent VA size caps, change from 48.
 #define GMM_GFX_ADDRESS_DECANONIZE(a)   ((uint64_t)(a) & (((uint64_t) 1 << 48) - 1)) // "
 
+#define GMM_GFX_PLATFORM_VA_SIZE(pClientContext)        (((pClientContext)->GetLibContext()->GetSkuTable().Ftr57bGPUAddressing) ? 57 : 48)
+#define VASize(pCC)                                     GMM_GFX_PLATFORM_VA_SIZE(pCC)
+
 #define GMM_BIT_RANGE(endbit, startbit)     ((endbit)-(startbit)+1)
 #define GMM_BIT(bit)                        (1)
+#define GMM_GET_PTE_BITS_FROM_PAT_IDX(idx)         ((((idx)&__BIT(4))   ? __BIT64(61)   : 0) |  \
+                                                    (((idx)&__BIT(3))   ? __BIT64(62)   : 0) |  \
+                                                    (((idx)&__BIT(2))   ? __BIT64(7)    : 0) |  \
+                                                    (((idx)&__BIT(1))   ? __BIT64(4)    : 0) |  \
+                                                    (((idx)&__BIT(0))   ? __BIT64(3)    : 0) )
 
+#define GMM_GET_PAT_IDX_FROM_PTE_BITS(Entry)       ((((Entry) & __BIT64(61))    ? __BIT(4) : 0) |  \
+                                                    (((Entry) & __BIT64(62))    ? __BIT(3) : 0) |  \
+                                                    (((Entry) & __BIT64(7))     ? __BIT(2) : 0) |  \
+                                                    (((Entry) & __BIT64(4))     ? __BIT(1) : 0) |  \
+                                                    (((Entry) & __BIT64(3))     ? __BIT(0) : 0) )
+
+#define GMM_GET_PAT_IDX_FROM_PTE_BITS_GGTT(Entry)  ((((Entry) & __BIT64(53))    ? __BIT(1) : 0) | \
+                                                    (((Entry) & __BIT64(52))    ? __BIT(0) : 0) )
+
+#define GMM_GET_PTE_BITS_FROM_PAT_IDX(idx)         ((((idx)&__BIT(4))   ? __BIT64(61)   : 0) |  \
+                                                    (((idx)&__BIT(3))   ? __BIT64(62)   : 0) |  \
+                                                    (((idx)&__BIT(2))   ? __BIT64(7)    : 0) |  \
+                                                    (((idx)&__BIT(1))   ? __BIT64(4)    : 0) |  \
+                                                    (((idx)&__BIT(0))   ? __BIT64(3)    : 0) )
+
+#define GMM_GET_PTE_BITS_FROM_PAT_IDX_LEAF_PD(idx) ((((idx)&__BIT(4))   ? __BIT64(61)   : 0) |  \
+                                                    (((idx)&__BIT(3))   ? __BIT64(62)   : 0) |  \
+                                                    (((idx)&__BIT(2))   ? __BIT64(12)   : 0) |  \
+                                                    (((idx)&__BIT(1))   ? __BIT64(4)    : 0) |  \
+                                                    (((idx)&__BIT(0))   ? __BIT64(3)    : 0) )
+
+#define GMM_GET_PTE_BITS_FROM_PAT_IDX_GGTT(idx)    ((((idx)&__BIT(1))   ? __BIT64(53)   : 0) |  \
+                                                    (((idx)&__BIT(0))   ? __BIT64(52)   : 0) )
 //===========================================================================
 // typedef:
 //      GMM_STATUS_ENUM
@@ -160,12 +203,13 @@ typedef enum GMM_CLIENT_ENUM
 // Macros related to GMM_CLIENT Enum
 #define USE_KMT_API(ClientType)         ((ClientType == GMM_OGL_VISTA) || (ClientType == GMM_OCL_VISTA) || (ClientType == GMM_VK_VISTA) || (ClientType == GMM_EXCITE_VISTA))
 #define USE_DX12_API(ClientType)        (ClientType == GMM_D3D12_VISTA)
-#define USE_DX_API(ClientType)          ((ClientType == GMM_D3D12_VISTA) || (GMM_D3D10_VISTA) || (GMM_D3D9_VISTA))
+#define USE_DX10_API(ClientType)        (ClientType == GMM_D3D10_VISTA)
+#define USE_DX_API(ClientType)          ((ClientType == GMM_D3D12_VISTA) || (ClientType == GMM_D3D10_VISTA) || (ClientType == GMM_D3D9_VISTA))
 
 #define GET_GMM_CLIENT_TYPE(pContext, ClientType)   \
 if(pContext)                                        \
 {                                                   \
-    ClientType = pContext->GetClientType();         \
+    ClientType = ((GmmClientContext*)pContext)->GetClientType();         \
 }                                                   \
 else                                                \
 {                                                   \
@@ -348,63 +392,6 @@ typedef enum GMM_YUV_PLANE_ENUM
     // No internal use >= GMM_MAX_PLANE!
 }GMM_YUV_PLANE;
 
-//===========================================================================
-// typedef:
-//        GMM_RESOURCE_TYPE
-//
-// Description:
-//     This enum describe type of resource requested
-//---------------------------------------------------------------------------
-typedef enum GMM_RESOURCE_TYPE_ENUM
-{
-    RESOURCE_INVALID,
-
-    // User-mode use
-    RESOURCE_1D,
-    RESOURCE_2D,
-    RESOURCE_3D,
-    RESOURCE_CUBE,
-    RESOURCE_SCRATCH,
-    RESOURCE_BUFFER,
-
-    //Kernel-mode use only
-    RESOURCE_KMD_CHECK_START,
-    RESOURCE_PRIMARY,
-    RESOURCE_SHADOW,
-    RESOURCE_STAGING,
-    RESOURCE_CURSOR,
-    RESOURCE_FBC,
-    RESOURCE_PWR_CONTEXT,
-    RESOURCE_PERF_DATA_QUEUE,
-    RESOURCE_KMD_BUFFER,
-    RESOURCE_HW_CONTEXT,
-    RESOURCE_TAG_PAGE,
-    RESOURCE_NNDI,
-    RESOURCE_HARDWARE_MBM,
-    RESOURCE_OVERLAY_DMA,
-    RESOURCE_OVERLAY_INTERMEDIATE_SURFACE,
-    RESOURCE_GTT_TRANSFER_REGION,
-    RESOURCE_GLOBAL_BUFFER,
-    RESOURCE_GDI,
-    RESOURCE_NULL_CONTEXT_INDIRECT_STATE,
-    RESOURCE_GFX_CLIENT_BUFFER,
-    RESOURCE_KMD_CHECK_END,
-    RESOURCE_SEGMENT,
-    RESOURCE_IFFS_MAPTOGTT,
-#if _WIN32
-    RESOURCE_WGBOX_ENCODE_STATE,
-    RESOURCE_WGBOX_ENCODE_DISPLAY,
-    RESOURCE_WGBOX_ENCODE_REFERENCE,
-    RESOURCE_WGBOX_ENCODE_TFD,
-#endif
-    // only used for allocation of context specific SVM Present kernels buffer
-    RESOURCE_SVM_KERNELS_BUFFER,
-
-    GMM_MAX_HW_RESOURCE_TYPE
-} GMM_RESOURCE_TYPE;
-
-//===========================================================================
-// typedef:
 //      GMM_RESOURCE_FORMAT
 //
 // Description:
@@ -455,9 +442,6 @@ typedef enum GMM_E2ECOMP_FORMAT_ENUM
     GMM_E2ECOMP_MIN_FORMAT = GMM_E2ECOMP_FORMAT_RGB32,
 
     GMM_E2ECOMP_FORMAT_YUY2,       //3h
-    GMM_E2ECOMP_FORMAT_YCRCB_SWAPUV = GMM_E2ECOMP_FORMAT_YUY2,
-    GMM_E2ECOMP_FORMAT_YCRCB_SWAPUVY = GMM_E2ECOMP_FORMAT_YUY2,
-    GMM_E2ECOMP_FORMAT_YCRCB_SWAPY = GMM_E2ECOMP_FORMAT_YUY2,
 
     GMM_E2ECOMP_FORMAT_Y410,       //4h
 
@@ -477,6 +461,10 @@ typedef enum GMM_E2ECOMP_FORMAT_ENUM
     GMM_E2ECOMP_FORMAT_SWAPY,      //Bh
     GMM_E2ECOMP_FORMAT_SWAPUV,     //Ch
     GMM_E2ECOMP_FORMAT_SWAPUVY,    //Dh
+    GMM_E2ECOMP_FORMAT_YCRCB_SWAPUV = GMM_E2ECOMP_FORMAT_SWAPY,
+    GMM_E2ECOMP_FORMAT_YCRCB_SWAPUVY = GMM_E2ECOMP_FORMAT_SWAPUV,
+    GMM_E2ECOMP_FORMAT_YCRCB_SWAPY = GMM_E2ECOMP_FORMAT_SWAPUVY,
+    
     GMM_E2ECOMP_FORMAT_RGB10b,     //Eh  --Which media format is it?
     GMM_E2ECOMP_FORMAT_NV12,       //Fh
 
@@ -629,3 +617,57 @@ typedef enum GMM_HW_COMMAND_STREAMER_ENUM
 // Reset packing alignment to project default
 #pragma pack(pop)
 
+//===========================================================================
+// typedef:
+//        GMM_RESOURCE_TYPE
+//
+// Description:
+//     This enum describe type of resource requested
+//---------------------------------------------------------------------------
+typedef enum GMM_RESOURCE_TYPE_ENUM
+{
+    RESOURCE_INVALID,
+
+    // User-mode use
+    RESOURCE_1D,
+    RESOURCE_2D,
+    RESOURCE_3D,
+    RESOURCE_CUBE,
+    RESOURCE_SCRATCH,
+    RESOURCE_BUFFER,
+
+    //Kernel-mode use only
+    RESOURCE_KMD_CHECK_START,
+    RESOURCE_PRIMARY,
+    RESOURCE_SHADOW,
+    RESOURCE_STAGING,
+    RESOURCE_CURSOR,
+    RESOURCE_FBC,
+    RESOURCE_PWR_CONTEXT,
+    RESOURCE_PERF_DATA_QUEUE,
+    RESOURCE_KMD_BUFFER,
+    RESOURCE_HW_CONTEXT,
+    RESOURCE_TAG_PAGE,
+    RESOURCE_NNDI,
+    RESOURCE_HARDWARE_MBM,
+    RESOURCE_OVERLAY_DMA,
+    RESOURCE_OVERLAY_INTERMEDIATE_SURFACE,
+    RESOURCE_GTT_TRANSFER_REGION,
+    RESOURCE_GLOBAL_BUFFER,
+    RESOURCE_GDI,
+    RESOURCE_NULL_CONTEXT_INDIRECT_STATE,
+    RESOURCE_GFX_CLIENT_BUFFER,
+    RESOURCE_KMD_CHECK_END,
+    RESOURCE_SEGMENT,
+    RESOURCE_IFFS_MAPTOGTT,
+#if _WIN32
+    RESOURCE_WGBOX_ENCODE_STATE,
+    RESOURCE_WGBOX_ENCODE_DISPLAY,
+    RESOURCE_WGBOX_ENCODE_REFERENCE,
+    RESOURCE_WGBOX_ENCODE_TFD,
+#endif
+    // only used for allocation of context specific SVM Present kernels buffer
+    RESOURCE_SVM_KERNELS_BUFFER,
+
+    GMM_MAX_HW_RESOURCE_TYPE
+} GMM_RESOURCE_TYPE;

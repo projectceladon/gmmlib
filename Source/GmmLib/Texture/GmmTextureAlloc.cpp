@@ -22,9 +22,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 #include "Internal/Common/GmmLibInc.h"
 
-int32_t GmmLib::GmmTextureCalc::RefCount = 0;
-
-
 /////////////////////////////////////////////////////////////////////////////////////
 /// This functions sets the Tile Mode of the graphics surface
 ///
@@ -35,7 +32,9 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
 {
     const GMM_PLATFORM_INFO *pPlatform;
 
-    pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
+    
+    pTexInfo->TileMode = TILE_NONE;
 
     if(pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags))
     {
@@ -99,7 +98,7 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
         }
         else
         {
-            if(pGmmGlobalContext->GetSkuTable().FtrTileY)
+            if(pGmmLibContext->GetSkuTable().FtrTileY)
             {
                 GENERATE_TILE_MODE(YS, 1D, 2D, 2D_2X, 2D_4X, 2D_8X, 2D_16X, 3D);
             }
@@ -109,11 +108,11 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
             }
 
             pTexInfo->Flags.Info.TiledYf = 0;
-            GMM_SET_64KB_TILE(pTexInfo->Flags, 1);
+            GMM_SET_64KB_TILE(pTexInfo->Flags, 1, pGmmLibContext);
         }
 
 
-        GMM_SET_4KB_TILE(pTexInfo->Flags, pGmmGlobalContext->GetSkuTable().FtrTileY ? 1 : 0);
+        GMM_SET_4KB_TILE(pTexInfo->Flags, pGmmLibContext->GetSkuTable().FtrTileY ? 1 : 0, pGmmLibContext);
 
         pTexInfo->Flags.Info.TiledX = 0;
         pTexInfo->Flags.Info.TiledW = 0;
@@ -122,13 +121,13 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
     }
     else if(GMM_IS_4KB_TILE(pTexInfo->Flags))
     {
-        GMM_SET_4KB_TILE(pTexInfo->Flags, 1);
+        GMM_SET_4KB_TILE(pTexInfo->Flags, 1, pGmmLibContext);
         pTexInfo->Flags.Info.TiledYf = 0;
         pTexInfo->Flags.Info.TiledYs = 0;
         pTexInfo->Flags.Info.TiledX  = 0;
         pTexInfo->Flags.Info.TiledW  = 0;
         pTexInfo->Flags.Info.Linear  = 0;
-        GMM_SET_4KB_TILE_MODE(pTexInfo->TileMode);
+        GMM_SET_4KB_TILE_MODE(pTexInfo->TileMode, pGmmLibContext);
     }
     else if(pTexInfo->Flags.Info.TiledX)
     {
@@ -164,6 +163,8 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
     {
         GMM_ASSERTDPF(0, "No tiling preference set!");
     }
+    
+    GMM_ASSERTDPF(pTexInfo->TileMode < GMM_TILE_MODES, "Invalid Tile Mode Set");
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -176,15 +177,15 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
 /// @return     ::GMM_STATUS
 /////////////////////////////////////////////////////////////////////////////////////
 #if(defined(__GMM_KMD__))
-GMM_STATUS GmmTexAlloc(GMM_TEXTURE_INFO *pTexInfo)
+GMM_STATUS GmmTexAlloc(GMM_LIB_CONTEXT *pGmmLibContext, GMM_TEXTURE_INFO *pTexInfo)
 {
-    GMM_TEXTURE_CALC *pTextureCalc = pGmmGlobalContext->GetTextureCalc();
+    GMM_TEXTURE_CALC *pTextureCalc = pGmmLibContext->GetTextureCalc();
     return (pTextureCalc->AllocateTexture(pTexInfo));
 }
 
-GMM_STATUS GmmTexLinearCCS(GMM_TEXTURE_INFO *pTexInfo, GMM_TEXTURE_INFO *pAuxTexInfo)
+GMM_STATUS GmmTexLinearCCS(GMM_LIB_CONTEXT *pGmmLibContext, GMM_TEXTURE_INFO *pTexInfo, GMM_TEXTURE_INFO *pAuxTexInfo)
 {
-    GMM_TEXTURE_CALC *pTextureCalc = pGmmGlobalContext->GetTextureCalc();
+    GMM_TEXTURE_CALC *pTextureCalc = pGmmLibContext->GetTextureCalc();
     return (pTextureCalc->FillTexCCS(pTexInfo, pAuxTexInfo));
 }
 #endif
@@ -204,13 +205,13 @@ GMM_STATUS GmmLib::GmmTextureCalc::AllocateTexture(GMM_TEXTURE_INFO *pTexInfo)
     GMM_STATUS        Status;
 
     __GMM_ASSERTPTR(pTexInfo, GMM_ERROR);
-    __GMM_ASSERTPTR(pGmmGlobalContext, GMM_ERROR);
+    __GMM_ASSERTPTR(pGmmLibContext, GMM_ERROR);
 
     GMM_DPF_ENTER;
 
     GetTexRestrictions(pTexInfo, &Restrictions);
 
-    if((Status = __GmmTexFillHAlignVAlign(pTexInfo)) != GMM_SUCCESS)
+    if((Status = __GmmTexFillHAlignVAlign(pTexInfo, pGmmLibContext)) != GMM_SUCCESS)
     {
         return Status;
     }
@@ -377,7 +378,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
 
     GMM_DPF_ENTER;
 
-    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
 
     // Make sure that we meet the minimum HW requirment for that buffer type
     WidthBytesPhysical = GFX_MAX(WidthBytesPhysical, pBufferType->MinPitch);
@@ -426,7 +427,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
 
         if(pTexInfo->Flags.Info.RenderCompressed || pTexInfo->Flags.Info.MediaCompressed)
         {
-            if(!GMM_IS_64KB_TILE(pTexInfo->Flags) && !pGmmGlobalContext->GetSkuTable().FtrFlatPhysCCS) //Ys is naturally aligned to required 4 YF pages
+            if(!GMM_IS_64KB_TILE(pTexInfo->Flags) && !pGmmLibContext->GetSkuTable().FtrFlatPhysCCS) //Ys is naturally aligned to required 4 YF pages
             {
                 // Align Pitch to 4-tile boundary
                 WidthBytesPhysical = GFX_ALIGN(WidthBytesPhysical,
@@ -449,7 +450,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
                                      pBufferType->RenderPitchAlignment);
 
         // Media Memory Compression : Allocate one memory tile wider than is required...
-        pGmmGlobalContext->GetTextureCalc()->AllocateOneTileThanRequied(pTexInfo, WidthBytesRender,
+        pGmmLibContext->GetTextureCalc()->AllocateOneTileThanRequied(pTexInfo, WidthBytesRender,
                                                                         WidthBytesPhysical, WidthBytesLock);
 
         // check if locking a particular suface need to be power 2 or not
@@ -474,7 +475,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
             WidthBytesPhysical = WidthBytesRender;
         }
 
-        if(pGmmGlobalContext->GetWaTable().WaMsaa8xTileYDepthPitchAlignment &&
+        if(pGmmLibContext->GetWaTable().WaMsaa8xTileYDepthPitchAlignment &&
            (pTexInfo->MSAA.NumSamples == 8) &&
            GMM_IS_4KB_TILE(pTexInfo->Flags) &&
            pTexInfo->Flags.Gpu.Depth)
@@ -501,7 +502,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
     // horizontal panning, the surface pitch should be a multiple of 4 tiles. Since
     // GMM doesn't know about lossless compression status at allocation time, here
     // we apply the WA to all unified aux surfaces.
-    if(pGmmGlobalContext->GetWaTable().WaLosslessCompressionSurfaceStride &&
+    if(pGmmLibContext->GetWaTable().WaLosslessCompressionSurfaceStride &&
        pTexInfo->Flags.Gpu.UnifiedAuxSurface &&
        (pTexInfo->BaseWidth > 3840))
     {
@@ -513,8 +514,8 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
     // the WA to all linear surfaces.
     // Xadapter surfaces has to be 128 Bytes aligned and hence we don't want this 512B alignment
     // for Xadapter. Eventually FBC will be disabled in case of Xadapter Linear surfaces
-    if(pGmmGlobalContext->GetSkuTable().FtrFbc &&
-       pGmmGlobalContext->GetWaTable().WaFbcLinearSurfaceStride &&
+    if(pGmmLibContext->GetSkuTable().FtrFbc &&
+       pGmmLibContext->GetWaTable().WaFbcLinearSurfaceStride &&
        pTexInfo->Flags.Gpu.FlipChain &&
        pTexInfo->Flags.Info.Linear &&
        !pTexInfo->Flags.Info.XAdapter)
@@ -545,10 +546,32 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
         GMM_ASSERTDPF(0, "Aux Surface pitch too large!");
         Status = GMM_ERROR;
     }
+    
+    if(pGmmLibContext->GetWaTable().Wa_15010089951)
+    {
+        // Default Tiling is set to Tile64 on FtrTileY disabled platforms
+        uint8_t IsYUVSurface = ((GmmIsPlanar(pTexInfo->Format) &&
+                                 (!((pTexInfo->Format == GMM_FORMAT_BGRP) || (pTexInfo->Format == GMM_FORMAT_RGBP)))) ||
+                                (GmmIsYUVPacked(pTexInfo->Format) &&
+                                 !((pTexInfo->Format == GMM_FORMAT_YVYU_2x1) || (pTexInfo->Format == GMM_FORMAT_UYVY_2x1) || (pTexInfo->Format == GMM_FORMAT_UYVY_2x1))));
+
+        //YCRCB* formats
+        uint8_t IsYCrCbSurface = ((pTexInfo->Format == GMM_FORMAT_YCRCB_NORMAL) ||
+                                  (pTexInfo->Format == GMM_FORMAT_YCRCB_SWAPUV) ||
+                                  (pTexInfo->Format == GMM_FORMAT_YCRCB_SWAPUVY) || (pTexInfo->Format == GMM_FORMAT_YCRCB_SWAPY));
+
+        // Allocation needs to extend an extra tile in width when pitch is not an odd multiplication
+        // of tile width which is 128 for Tile4 (YUV allocation is forced as Tile4).
+        if(pTexInfo->Flags.Info.Tile4 && (IsYUVSurface || IsYCrCbSurface) &&
+           ((pTexInfo->Pitch / (pPlatform->TileInfo[pTexInfo->TileMode].LogicalTileWidth)) % 2 == 0))
+        {
+            pTexInfo->Pitch = (pTexInfo->Pitch + (pPlatform->TileInfo[pTexInfo->TileMode].LogicalTileWidth));
+        }
+    }
 
     // For NV12 Linear FlipChain surfaces, UV plane distance should be 4k Aligned.
     // Hence make the stride to align to 4k, so that UV distance will be 4k aligned.
-    if(pGmmGlobalContext->GetWaTable().Wa4kAlignUVOffsetNV12LinearSurface &&
+    if(pGmmLibContext->GetWaTable().Wa4kAlignUVOffsetNV12LinearSurface &&
        (pTexInfo->Format == GMM_FORMAT_NV12 || GmmIsP0xx(pTexInfo->Format)) && pTexInfo->Flags.Info.Linear &&
        (!pTexInfo->Flags.Info.XAdapter) &&
        ((pTexInfo->Type == RESOURCE_PRIMARY) || pTexInfo->Flags.Gpu.FlipChain))
@@ -565,12 +588,17 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
         }
     }
 
+    if((GFX_GET_CURRENT_PRODUCT(pPlatform->Platform) >= IGFX_METEORLAKE))
+    {
+        pTexInfo->OffsetInfo.PlaneXe_LPG.PhysicalPitch = pTexInfo->Pitch;
+    }
+
     { // Surface Sizes
         int64_t Size;
 
         if(pTexInfo->Flags.Gpu.S3d)
         {
-            if(pGmmGlobalContext->GetSkuTable().FtrDisplayEngineS3d) // BDW+ Display Engine S3D (Tiled)
+            if(pGmmLibContext->GetSkuTable().FtrDisplayEngineS3d) // BDW+ Display Engine S3D (Tiled)
             {
                 __GMM_ASSERT(!pTexInfo->Flags.Info.Linear);
 
@@ -679,13 +707,13 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
                 // The width/height for TileYf/Ys MSAA surfaces are not expanded (using GmmExpandWidth/Height functions)
                 // because pitch for these surfaces is in their non-expanded dimensions. So, the pitch
                 // is also non-expanded units.  That's why, we multiply by the sample size here to get the correct size.
-                if(pGmmGlobalContext->GetSkuTable().FtrTileY)
+                if(pGmmLibContext->GetSkuTable().FtrTileY)
                 {
                     Size *= pTexInfo->MSAA.NumSamples;
                 }
                 else
                 {
-                    //XeHP
+                    //XeHP, DG2
                     if((pTexInfo->MSAA.NumSamples == 8 || pTexInfo->MSAA.NumSamples == 16))
                     {
                         uint64_t SliceSize = pTexInfo->Pitch * Height;
@@ -707,7 +735,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
 
             // Buffer Sampler Padding...
             if((pTexInfo->Type == RESOURCE_BUFFER) &&
-               pGmmGlobalContext->GetWaTable().WaNoMinimizedTrivialSurfacePadding &&
+               pGmmLibContext->GetWaTable().WaNoMinimizedTrivialSurfacePadding &&
                !pTexInfo->Flags.Wa.NoBufferSamplerPadding &&
                !pTexInfo->Flags.Info.ExistingSysMem && // <-- Currently using separate padding WA in OCL (and rarity/luck in other UMD's).
                // <-- Never sampled from.
@@ -769,6 +797,10 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
         {
             SurfaceMaxSize = pPlatform->NoRestriction.MaxWidth;
         }
+        else if(pTexInfo->Flags.Gpu.TiledResource)
+        {
+            SurfaceMaxSize = GMM_TBYTE(1);
+        }
         else
         {
             SurfaceMaxSize = pPlatform->SurfaceMaxSize;
@@ -818,7 +850,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
         pTexInfo->Alignment.BaseAlignment = (GFX_IS_ALIGNED(pTexInfo->Alignment.BaseAlignment, GMM_KBYTE(64))) ? pTexInfo->Alignment.BaseAlignment : GMM_KBYTE(64);
     }
 
-    if(pGmmGlobalContext->GetWaTable().WaCompressedResourceRequiresConstVA21 && pTexInfo->Flags.Gpu.MMC)
+    if(pGmmLibContext->GetWaTable().WaCompressedResourceRequiresConstVA21 && pTexInfo->Flags.Gpu.MMC)
     {
         pTexInfo->Alignment.BaseAlignment = GMM_MBYTE(4);
     }
@@ -827,156 +859,6 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
 
     return (Status);
 } // FillTexPitchAndSize
-
-
-/////////////////////////////////////////////////////////////////////////////////////
-/// Sets the tiling  type based on the required alignment parameters.
-///
-/// @param[in]  pTexInfo: Reference to ::GMM_TEXTURE_INFO
-/// @param[in]  CreateParams: Flags which specify what sort of resource to create
-/// @param[in]  YHeight: Height of Y plane
-/// @param[in]  YHeightAlignmentNeeded: Alignment requirement of Y plane
-/// @param[in]  VHeight: Height of UV plane
-/// @param[in]  VHeightAlignmentNeeded: Alignment requirement of UV plane
-///
-/////////////////////////////////////////////////////////////////////////////////////
-void GmmLib::GmmTextureCalc::FillTexPlanar_SetTilingBasedOnRequiredAlignment(
-GMM_TEXTURE_INFO *pTexInfo,
-uint32_t YHeight, bool YHeightAlignmentNeeded,
-uint32_t VHeight, bool VHeightAlignmentNeeded)
-{
-    uint32_t YHeightAlignment, VHeightAlignment;
-    bool     ClientAllowsTileFormat;
-    enum
-    {
-        X,
-        Y,
-        Yf,
-        Ys
-    };
-    int32_t TileType;
-
-    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
-
-    // First try Tile-Y, then Tile-X (then fallback to linear if necessary)...
-    for(TileType = Ys; TileType >= X; TileType--)
-    {
-        switch(TileType)
-        {
-            case Ys:
-                ClientAllowsTileFormat = (pTexInfo->Flags.Info.TiledYs != 0);
-                break;
-            case Yf:
-                ClientAllowsTileFormat = (pTexInfo->Flags.Info.TiledYf != 0);
-                break;
-            case Y:
-                ClientAllowsTileFormat = (pTexInfo->Flags.Info.TiledY != 0);
-                break;
-            default:
-                ClientAllowsTileFormat = (pTexInfo->Flags.Info.TiledX != 0);
-        }
-
-        if(ClientAllowsTileFormat)
-        {
-            // When planar surfaces are tiled, there are HW alignment
-            // restrictions about where the U and V planes can be located.
-            // Prior to SURFACE_STATE.X/YOffset support, planes needed to start
-            // on tile boundaries; with X/YOffset support, the alignment
-            // restrictions were reduced (but not eliminated).
-            //
-            // Horizontal alignment is only an issue for IMC2/4 surfaces, since
-            // the planes of all other formats are always on the left-edge.
-            // This IMC2/4 horizontal alignment is handled in GmmTexFillPlanar.
-            // Here we will only consider vertical alignment.
-            //
-            // For IMC1/3 surfaces, we must ensure that both the U/V planes are
-            // properly aligned--That is, both the YHeight and VHeight must be
-            // properly aligned. For all other surfaces (since the U/V data
-            // starts at a common vertical location) only YHeight must be
-            // properly aligned.
-
-            // Y/VHeight Alignments...
-            YHeightAlignment =
-            VHeightAlignment =
-            pPlatform->SurfaceStateYOffsetGranularity;
-
-            // WA for PLANAR_420_* Formats...
-            if(pGmmGlobalContext->GetWaTable().WaSurfaceStatePlanarYOffsetAlignBy2 &&
-               ((pTexInfo->Format == GMM_FORMAT_IMC1) ||
-                (pTexInfo->Format == GMM_FORMAT_IMC2) ||
-                (pTexInfo->Format == GMM_FORMAT_IMC3) ||
-                (pTexInfo->Format == GMM_FORMAT_IMC4) ||
-                (pTexInfo->Format == GMM_FORMAT_NV12) ||
-                (pTexInfo->Format == GMM_FORMAT_YV12)))
-            {
-                YHeightAlignment = VHeightAlignment = 2;
-            }
-
-            // Filter-Out Unneeded Alignments...
-            YHeightAlignment = YHeightAlignmentNeeded ? YHeightAlignment : 1;
-            VHeightAlignment = VHeightAlignmentNeeded ? VHeightAlignment : 1;
-
-            if((TileType == Ys || TileType == Yf) ||
-               ((YHeight == GFX_ALIGN(YHeight, YHeightAlignment)) &&
-                (VHeight == GFX_ALIGN(VHeight, VHeightAlignment))))
-            {
-// clang-format off
-                #define SET_TILE_MODE(Submode)                                      \
-                        (pTexInfo->BitsPerPixel == 128) ? TILE_##Submode##_128bpe : \
-                        (pTexInfo->BitsPerPixel ==  64) ? TILE_##Submode##_64bpe  : \
-                        (pTexInfo->BitsPerPixel ==  32) ? TILE_##Submode##_32bpe  : \
-                        (pTexInfo->BitsPerPixel ==  16) ? TILE_##Submode##_16bpe  : \
-                                                          TILE_##Submode##_8bpe
-                // clang-format on
-                // Cool--Drop other possibilities...
-                pTexInfo->Flags.Info.Linear = 0;
-                switch(TileType)
-                {
-                    case Ys:
-                        pTexInfo->Flags.Info.TiledX  = 0;
-                        pTexInfo->Flags.Info.TiledY  = 0;
-                        pTexInfo->Flags.Info.TiledYf = 0;
-                        pTexInfo->TileMode           = (pTexInfo->Type == RESOURCE_2D) ? SET_TILE_MODE(YS_2D) : SET_TILE_MODE(YS_3D);
-                        break;
-                    case Yf:
-                        pTexInfo->Flags.Info.TiledX  = 0;
-                        pTexInfo->Flags.Info.TiledY  = 0;
-                        pTexInfo->Flags.Info.TiledYs = 0;
-                        pTexInfo->TileMode           = (pTexInfo->Type == RESOURCE_2D) ? SET_TILE_MODE(YF_2D) : SET_TILE_MODE(YF_3D);
-                        break;
-                    case Y:
-                        pTexInfo->Flags.Info.TiledX  = 0;
-                        pTexInfo->Flags.Info.TiledYs = 0;
-                        pTexInfo->Flags.Info.TiledYf = 0;
-                        pTexInfo->TileMode           = LEGACY_TILE_Y;
-                        break;
-                    default:
-                        pTexInfo->Flags.Info.TiledY  = 0;
-                        pTexInfo->Flags.Info.TiledYs = 0;
-                        pTexInfo->Flags.Info.TiledYf = 0;
-                        pTexInfo->TileMode           = LEGACY_TILE_X;
-                }
-#undef SET_TILE_MODE
-            }
-            else
-            {
-                // Can't use this tiling format...
-                switch(TileType)
-                {
-                    case Y:
-                        pTexInfo->Flags.Info.TiledY = 0;
-                        break;
-                    case X:
-                        pTexInfo->Flags.Info.TiledX = 0;
-                        break;
-                    default:
-                        break;
-                }
-            }
-        } // if(ClientAllowsTileFormat)
-    }     // for(TileType)
-} // FillTexPlanar_SetTilingBasedOnRequiredAlignment
-
 
 /////////////////////////////////////////////////////////////////////////////////////
 /// This function will Setup a planar surface allocation.
@@ -1000,7 +882,7 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
     __GMM_ASSERT(!pTexInfo->Flags.Info.TiledW);
     pTexInfo->TileMode = TILE_NONE;
 
-    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
 
     WidthBytesPhysical = GFX_ULONG_CAST(pTexInfo->BaseWidth) * pTexInfo->BitsPerPixel >> 3;
     Height = VHeight = 0;
@@ -1322,8 +1204,8 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
     // and width must be adjusted for correct size calculation
     if(GMM_IS_TILED(pPlatform->TileInfo[pTexInfo->TileMode]))
     {
-        uint32_t TileHeight = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileHeight;
-        uint32_t TileWidth  = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileWidth;
+        uint32_t TileHeight = pGmmLibContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileHeight;
+        uint32_t TileWidth  = pGmmLibContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileWidth;
 
         pTexInfo->OffsetInfo.Plane.IsTileAlignedPlanes = true;
 
@@ -1354,8 +1236,8 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
        pTexInfo->Flags.Gpu.UnifiedAuxSurface &&
        pTexInfo->Flags.Info.TiledY)
     {
-        uint32_t TileHeight = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileHeight;
-        uint32_t TileWidth  = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileWidth;
+        uint32_t TileHeight = pGmmLibContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileHeight;
+        uint32_t TileWidth  = pGmmLibContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileWidth;
 
         Height = GFX_ALIGN(YHeight, TileHeight) + GFX_ALIGN(VHeight, TileHeight);
     }
@@ -1558,7 +1440,7 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::MSAACCSUsage(GMM_TEXTURE_INFO *pT
             // FastClear: 3584x640 (for TileY FastClear Granularity of 512x128)
             // CCS:       112x20 (for TileY RT:CCS Sizing Downscale of 32x32)
 
-            uint32_t AlignmentFactor = pGmmGlobalContext->GetWaTable().WaDoubleFastClearWidthAlignment ? 2 : 1;
+            uint32_t AlignmentFactor = pGmmLibContext->GetWaTable().WaDoubleFastClearWidthAlignment ? 2 : 1;
 
             pTexInfo->BaseWidth    = pTexInfo->BaseWidth * pTexInfo->BitsPerPixel / 8;
             pTexInfo->BitsPerPixel = 8;
@@ -1612,7 +1494,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::MSAACompression(GMM_TEXTURE_INFO *pTexInfo)
         pTexInfo->Format       = GMM_FORMAT_GENERIC_64BIT;
     }
 
-    if((Status = __GmmTexFillHAlignVAlign(pTexInfo)) != GMM_SUCCESS) // Need to get our alignment (matching RT) before overwriting our RT's MSAA setting.
+    if((Status = __GmmTexFillHAlignVAlign(pTexInfo, pGmmLibContext)) != GMM_SUCCESS) // Need to get our alignment (matching RT) before overwriting our RT's MSAA setting.
     {
         return Status;
     }
@@ -1634,7 +1516,7 @@ void GMM_STDCALL GmmLib::GmmTextureCalc::AllocateOneTileThanRequied(GMM_TEXTURE_
                                                                     GMM_GFX_SIZE_T &  WidthBytesPhysical,
                                                                     GMM_GFX_SIZE_T &  WidthBytesLock)
 {
-    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo, pGmmLibContext);
 
     if(pTexInfo->Flags.Gpu.MMC && !pTexInfo->Flags.Gpu.UnifiedAuxSurface)
     {

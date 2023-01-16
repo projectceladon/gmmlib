@@ -306,7 +306,7 @@ protected:
             { { 256, 256 },{ 512, 128 },{ 512, 128 },{ 1024, 64 },{ 1024, 64 } },   //TileYs
             { { 64, 64 },{ 128, 32 },{ 128, 32 },{ 256, 16 },{ 256, 16 } }     //TileYf
         };
-        uint32_t WMul, HMul;
+        uint32_t WMul = 1, HMul = 1;
 
         HAlign = 16;                              // RT H/VAlign
         VAlign = 4;
@@ -460,6 +460,21 @@ protected:
         if(Verify)
         {
             EXPECT_EQ(ExpectedValue, ResourceInfo->GetQPitch());
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////
+    /// Verifies if Tile4 info flag is set or not.  Fails test if Tile4 flag is not set
+    ///
+    /// @param[in]  ResourceInfo: ResourceInfo returned by GmmLib
+    /// @param[in]  ExpectedValue: expected value to check against
+    /////////////////////////////////////////////////////////////////////////////////////
+    template <bool Verify>
+    void VerifyResourceTile4(GMM_RESOURCE_INFO *ResourceInfo, bool ExpectedValue)
+    {
+        if(Verify)
+        {
+            EXPECT_EQ(true, (GMM_IS_4KB_TILE(ResourceInfo->GetResFlags())));
         }
     }
 
