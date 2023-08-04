@@ -67,8 +67,14 @@ cc_library_static {
     ],
 
     cflags: [
+        "-Wno-logical-op-parentheses",
         "-Wno-error",
         "-Wno-unused-parameter",
+        "-msse2",
+        "-msse3",
+        "-mssse3",
+        "-msse4.1",
+        "-msse4.2",
         "-DGMM_LIB_DLL",
         "-DGMM_LIB_DLL_EXPORTS",
         "-DGMM_UNIFIED_LIB",
@@ -87,6 +93,14 @@ cc_library_static {
     ],
 
     cppflags: [
+        "-Wno-implicit-fallthrough",
+        "-Wno-missing-braces",
+        "-Wno-parentheses-equality",
+        "-Wno-logical-not-parentheses",
+        "-Wno-missing-field-initializers",
+        "-Wno-unknown-pragmas",
+        "-Wno-parentheses",
+        "-Wno-pragma-pack",
         "-fexceptions",
         "-std=c++11",
     ],
@@ -101,6 +115,7 @@ cc_library_static {
         "Source/GmmLib/Platform",
         "Source/util",
         "Source/inc/umKmInc",
+        "Source/install",
     ],
 
     export_include_dirs: [
