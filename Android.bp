@@ -115,7 +115,6 @@ cc_library_static {
         "Source/GmmLib/Platform",
         "Source/util",
         "Source/inc/umKmInc",
-        "Source/install",
     ],
 
     export_include_dirs: [
