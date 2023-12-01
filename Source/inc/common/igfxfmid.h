@@ -76,6 +76,7 @@ typedef enum {
     IGFX_DG2 = 1270,
     IGFX_PVC = 1271,
     IGFX_METEORLAKE = 1272,
+    IGFX_ARROWLAKE = 1273,
 
     IGFX_MAX_PRODUCT,
     IGFX_GENNEXT               = 0x7ffffffe,
@@ -108,6 +109,8 @@ typedef enum {
     PCH_TGL_H,          // TGL H PCH
     PCH_ADL_N,          // ADL_N PCHDL
     PCH_MTL,            // MTL PCH
+    PCH_ARL,            // ARL PCH
+    
     PCH_PRODUCT_FAMILY_FORCE_ULONG = 0x7fffffff
 } PCH_PRODUCT_FAMILY;
 
@@ -291,9 +294,16 @@ typedef enum __NATIVEGTTYPE
 #define GFX_GET_CURRENT_RENDERCORE(p)  ( (p).eRenderCoreFamily )
 
 // This macro returns true if the product family is discrete
-#define GFX_IS_DISCRETE_FAMILY(p)      ( ( GFX_GET_CURRENT_PRODUCT(p) == IGFX_DG1 ) ||  \
-                                         ( GFX_GET_CURRENT_PRODUCT(p) == IGFX_XE_HP_SDV ) || \
-					 ( GFX_GET_CURRENT_PRODUCT(p) == IGFX_DG2 ) )
+#define GFX_IS_DISCRETE_PRODUCT(pf)    ( ( pf == IGFX_DG1 )             ||   \
+                                         ( pf == IGFX_DG2 )             ||   \
+                                         ( pf == IGFX_XE_HP_SDV ) )
+
+#define GFX_IS_DISCRETE_FAMILY(p)      GFX_IS_DISCRETE_PRODUCT(GFX_GET_CURRENT_PRODUCT(p))
+
+#define GFX_IS_INTEGRATED_PRODUCT(pf)  (!GFX_IS_DISCRETE_PRODUCT(pf))
+
+#define GFX_IS_INTEGRATED_FAMILY(p)    (!GFX_IS_DISCRETE_FAMILY(p))
+
 
 // These macros return true/false depending on the current render family.
 #define GFX_IS_NAPA_RENDER_FAMILY(p)   ( ( GFX_GET_CURRENT_RENDERCORE(p) == IGFX_GEN3_CORE )    ||   \
@@ -640,12 +650,6 @@ typedef enum __NATIVEGTTYPE
 #define ICHV_PLUS_DESK_DEVICE_F0_ID      0x22B3   // Reserved
 
 //BDW device ids
-#define IBDW_GT0_DESK_DEVICE_F0_ID              0x0BD0
-#define IBDW_GT1_DESK_DEVICE_F0_ID              0x0BD1
-#define IBDW_GT2_DESK_DEVICE_F0_ID              0x0BD2
-#define IBDW_GT3_DESK_DEVICE_F0_ID              0x0BD3
-#define IBDW_GT4_DESK_DEVICE_F0_ID              0x0BD4
-
 #define IBDW_GT1_HALO_MOBL_DEVICE_F0_ID         0x1602
 #define IBDW_GT1_ULT_MOBL_DEVICE_F0_ID          0x1606
 #define IBDW_GT1_RSVD_DEVICE_F0_ID              0x160B
@@ -1837,6 +1841,40 @@ typedef enum __NATIVEGTTYPE
 #define PCH_DEV_ID_AE1E         0xAE1E
 #define PCH_DEV_ID_AE1F         0xAE1F
 
+// ARL PCH Dev IDs
+#define PCH_DEV_ID_7700         0x7700
+#define PCH_DEV_ID_7701         0x7701
+#define PCH_DEV_ID_7702         0x7702
+#define PCH_DEV_ID_7703         0x7703
+#define PCH_DEV_ID_7704         0x7704
+#define PCH_DEV_ID_7705         0x7705
+#define PCH_DEV_ID_7706         0x7706
+#define PCH_DEV_ID_7707         0x7707
+#define PCH_DEV_ID_7708         0x7708
+#define PCH_DEV_ID_7709         0x7709
+#define PCH_DEV_ID_770A         0x770A
+#define PCH_DEV_ID_770B         0x770B
+#define PCH_DEV_ID_770C         0x770C
+#define PCH_DEV_ID_770D         0x770D
+#define PCH_DEV_ID_770E         0x770E
+#define PCH_DEV_ID_770F         0x770F
+#define PCH_DEV_ID_7710         0x7710
+#define PCH_DEV_ID_7711         0x7711
+#define PCH_DEV_ID_7712         0x7712
+#define PCH_DEV_ID_7713         0x7713
+#define PCH_DEV_ID_7714         0x7714
+#define PCH_DEV_ID_7715         0x7715
+#define PCH_DEV_ID_7716         0x7716
+#define PCH_DEV_ID_7717         0x7717
+#define PCH_DEV_ID_7718         0x7718
+#define PCH_DEV_ID_7719         0x7719
+#define PCH_DEV_ID_771A         0x771A
+#define PCH_DEV_ID_771B         0x771B
+#define PCH_DEV_ID_771C         0x771C
+#define PCH_DEV_ID_771D         0x771D
+#define PCH_DEV_ID_771E         0x771E
+#define PCH_DEV_ID_771F         0x771F
+
 //PVC Device ID
 #define DEV_ID_0BD0                            0x0BD0
 #define DEV_ID_0BD5                            0x0BD5
@@ -1891,14 +1929,17 @@ typedef enum __NATIVEGTTYPE
 #define DEV_ID_56C0                             0x56C0
 #define DEV_ID_56C1                             0x56C1
 
-
-// RPL-P
+// RPL-P/U
 #define DEV_ID_A7A0                             0xA7A0
 #define DEV_ID_A7A1                             0xA7A1
 #define DEV_ID_A7A8                             0xA7A8
 #define DEV_ID_A7A9                             0xA7A9
 #define DEV_ID_A720                             0xA720
 #define DEV_ID_A721                             0xA721
+#define DEV_ID_A7AA                             0xA7AA
+#define DEV_ID_A7AB                             0xA7AB
+#define DEV_ID_A7AC                             0xA7AC
+#define DEV_ID_A7AD                             0xA7AD
 
 // ADL-N
 #define DEV_ID_46D0                             0x46D0
@@ -1913,6 +1954,9 @@ typedef enum __NATIVEGTTYPE
 #define DEV_ID_7D60                             0x7D60
 #define DEV_ID_7DD5                             0x7DD5
 #define DEV_ID_7DD7                             0x7DD7
+
+// ARL-S
+#define DEV_ID_7D67                             0x7D67
 
 #define MGM_HAS     0
 
@@ -1952,6 +1996,9 @@ typedef enum __NATIVEGTTYPE
                                       ( d == DEV_ID_5697 )                              ||   \
                                       ( d == DEV_ID_56B2 )                              ||   \
                                       ( d == DEV_ID_56B3 ))
+
+// Macro to identify ARL-S Device ID
+#define GFX_IS_ARL_S(d)  ( ( d == DEV_ID_7D67 ) )
 
 //we define the highest cap and lower cap of stepping IDs
 #define SI_REV_ID(lo,hi) (lo | hi<<16)
