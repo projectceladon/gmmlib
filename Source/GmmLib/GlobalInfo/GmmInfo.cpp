@@ -1005,6 +1005,10 @@ GMM_CLIENT               ClientType)
     this->GtSysInfo = *pGtSysInfo;
     
     this->pPlatformInfo = CreatePlatformInfo(Platform, false);
+    if(this->pPlatformInfo == NULL)
+    {
+        return GMM_ERROR;
+    }
 
     OverrideSkuWa();
 
@@ -1075,7 +1079,7 @@ GMM_CACHE_POLICY *GMM_STDCALL GmmLib::Context::CreateCachePolicyCommon()
         return GetCachePolicyObj();
     }
 
-    if((GFX_GET_CURRENT_PRODUCT(GetPlatformInfo().Platform) == IGFX_METEORLAKE))
+    if((GFX_GET_CURRENT_PRODUCT(GetPlatformInfo().Platform) == IGFX_METEORLAKE) || (GFX_GET_CURRENT_PRODUCT(GetPlatformInfo().Platform) == IGFX_ARROWLAKE))
     {
         pGmmCachePolicy = new GmmLib::GmmXe_LPGCachePolicy(CachePolicy, this);
     }
