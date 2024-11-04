@@ -2036,6 +2036,7 @@ typedef enum __NATIVEGTTYPE
 #define GFX_IS_DG2_G10_CONFIG(d) ( ( d == DEV_ID_56A0 )                              ||   \
                                       ( d == DEV_ID_56A1 )                              ||   \
                                       ( d == DEV_ID_56A2 )                              ||   \
+                                      ( d == DEV_ID_56AF )                              ||   \
                                       ( d == DEV_ID_5690 )                              ||   \
                                       ( d == DEV_ID_5691 )                              ||   \
                                       ( d == DEV_ID_5692 )                              ||   \
